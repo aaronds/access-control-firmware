@@ -12,7 +12,7 @@ static const char* TAG = "gpio";
 
 #define RELAY_GPIO_PIN (26)
 #define LED_GPIO_PIN (19)
-#define BUTTON_GPIO_PIN (0)
+#define BUTTON_GPIO_PIN (4)
 #define DEBOUNCE_INTERVAL_MS (100)
 
 static esp_event_loop_handle_t gpio_event_handle;
@@ -31,7 +31,7 @@ static void IRAM_ATTR button_isr_handler(void* arg)
 
 static void debounce_timer_handler(TimerHandle_t timer)
 {
-    bool current_button_state = (!gpio_get_level(BUTTON_GPIO_PIN));
+    bool current_button_state = (gpio_get_level(BUTTON_GPIO_PIN));
     if(current_button_state != last_button_state)
     {
         last_button_state = current_button_state;
