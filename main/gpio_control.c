@@ -12,7 +12,7 @@ static const char* TAG = "gpio";
 
 #define RELAY_GPIO_PIN (26)
 #define LED_GPIO_PIN (19)
-#define BUTTON_GPIO_PIN (0)
+#define BUTTON_GPIO_PIN (4)
 #define DEBOUNCE_INTERVAL_MS (100)
 
 static esp_event_loop_handle_t gpio_event_handle;
@@ -26,12 +26,14 @@ static void IRAM_ATTR button_isr_handler(void* arg)
 {
     // Start the timer to check the GPIO after the debounce time
     BaseType_t wake_higher_prio_task = pdFALSE;
+    gpio_intr_disable(BUTTON_GPIO_PIN);
     xTimerStartFromISR(debounce_timer, &wake_higher_prio_task);
 }
 
 static void debounce_timer_handler(TimerHandle_t timer)
 {
-    bool current_button_state = (!gpio_get_level(BUTTON_GPIO_PIN));
+    gpio_intr_enable(BUTTON_GPIO_PIN);
+    bool current_button_state = (gpio_get_level(BUTTON_GPIO_PIN));
     if(current_button_state != last_button_state)
     {
         last_button_state = current_button_state;
@@ -65,7 +67,7 @@ esp_err_t gpio_control_init(esp_event_loop_handle_t event_handle)
     btn_conf.intr_type = GPIO_INTR_ANYEDGE;
     btn_conf.pin_bit_mask = (1ULL << BUTTON_GPIO_PIN);
     btn_conf.mode = GPIO_MODE_INPUT;
-    btn_conf.pull_down_en = 1;
+    btn_conf.pull_up_en = 0;
     gpio_config(&btn_conf);
     debounce_timer = xTimerCreateStatic("debounceTimer",
                                 DEBOUNCE_INTERVAL_MS/portTICK_PERIOD_MS,
