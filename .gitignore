@@ -4,3 +4,6 @@ sdkconfig.old
 .vscode/settings.json
 managed_components/
 dependencies.lock
+*.swo
+*.swp
+*.swq

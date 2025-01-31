@@ -5,11 +5,13 @@
 #include "esp_log.h"
 #include "esp_ota_ops.h"
 
+#include "statsd.h"
 #include "wifi_manage.h"
 #include "http_api.h"
 #include "pn532.h"
 #include "status_indicator.h"
 #include "gpio_control.h"
+#include "telemetry.h"
 
 static const char* TAG = "main";
 
@@ -23,6 +25,8 @@ typedef enum {
 } controller_mode_t;
 
 static controller_mode_t controller_mode = CONTROLLER_MODE_INITIALISING;
+TaskHandle_t controller_telemetry_task;
+
 static uint8_t inductor_tag[4];
 
 void controller_lock(void)
@@ -30,17 +34,22 @@ void controller_lock(void)
     status_indicator_idle();
     gpio_set_relay(false);
     controller_mode = CONTROLLER_MODE_LOCKED;
+    statsd_value("relay_state",0);
 }
 
 void controller_try_unlock(pn532_event_tag_scanned_data_t* tag)
 {
+    statsd_timer_t timer = statsd_timer_start();
     esp_err_t ret = http_api_unlock(tag->data, sizeof(tag->data));
     if (ret == ESP_OK) {
         status_indicator_output_on();
         gpio_set_relay(true);
         controller_mode = CONTROLLER_MODE_UNLOCKED;
+        statsd_timer("control_unlock_unlocked", timer);
+        statsd_value("relay_state",1);
     } else {
         status_indicator_error_brief();
+        statsd_timer("control_unlock_error", timer);
     }
 }
 
@@ -111,6 +120,7 @@ void on_button_pressed(void* handler_arg, esp_event_base_t base, int32_t id, voi
     default:
         break;
     }
+    statsd_inc("button_press");
 }
 
 void on_button_released(void* handler_arg, esp_event_base_t base, int32_t id, void* event_data)
@@ -122,6 +132,7 @@ void on_button_released(void* handler_arg, esp_event_base_t base, int32_t id, vo
     default:
         break;
     }
+    statsd_inc("button_released");
 }
 
 void app_main(void)
@@ -137,6 +148,8 @@ void app_main(void)
 
     wifi_init_sta();
 
+    statsd_init();
+
     ESP_ERROR_CHECK(http_api_init());
 
     status_indicator_init();
@@ -145,23 +158,27 @@ void app_main(void)
         char update_url[128] = {0};
         ret = http_api_has_update(update_url, sizeof(update_url));
         if (ret) {
+            statsd_inc("ota_hasUpdate_fail");
             vTaskDelay(2000/portTICK_PERIOD_MS);
             continue;
         }
 
         if(strlen(update_url)) {
             ESP_LOGI(TAG, "Update required from: %s", update_url);
+            statsd_inc("ota_hasUpdate_true");
             ret = http_api_ota(update_url);
             if (ret != ESP_OK) {
                 ESP_LOGE(TAG, "OTA failed");
             }
         } else {
+            statsd_inc("ota_hasUpdate_false");
             esp_ota_img_states_t state = ESP_OTA_IMG_UNDEFINED;
             const esp_partition_t* running_partition = esp_ota_get_running_partition();
             esp_ota_get_state_partition(running_partition, &state);
             if (state == ESP_OTA_IMG_PENDING_VERIFY) {
                 esp_ota_mark_app_valid_cancel_rollback();
                 ESP_LOGI(TAG, "Update successful, cancelling rollback");
+                statsd_inc("ota_hasUpdate_cancelRollback");
             }
         }
         break;
@@ -185,7 +202,7 @@ void app_main(void)
         .event_handle = app_events,
         .uart = {
             .rw_timeout_ms = 500,
-            .port = UART_NUM_0,
+            .port = UART_NUM_2,
             .rx_gpio = UART_PIN_NO_CHANGE,
             .tx_gpio = UART_PIN_NO_CHANGE,
         }
@@ -197,8 +214,17 @@ void app_main(void)
 
     ESP_ERROR_CHECK(gpio_control_init(app_events));
 
+
     controller_lock();
 
+    telemetry_config.main_handle = xTaskGetCurrentTaskHandle();
+    telemetry_config.pn532_handle = 0;
+    telemetry_config.controller_mode = (uint16_t *) &controller_mode;
+    
+    ESP_ERROR_CHECK(telemetry_start());
+
+
+    statsd_inc("main_eventLoop");
     while (1)
     {
         ret = esp_event_loop_run(app_events, portMAX_DELAY);

@@ -36,5 +36,16 @@ menu "Access controller configuration"
         help
             Stack size of the NFC task
 
+    config STATSD_IP
+        string "StatsD IP Address"
+        default "10.0.0.1"
+        help
+            IP Address of StatsD
+
+    config STATSD_PORT
+        int "StatsD Port"
+        default 8125
+        help
+            Port number for StatsD
 
 endmenu

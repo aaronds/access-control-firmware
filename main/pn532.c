@@ -3,6 +3,7 @@
 #include "esp_log.h"
 #include <string.h>
 
+#include "statsd.h"
 #include "pn532.h"
 #include "pn532_registers.h"
 
@@ -95,6 +96,7 @@ int pn532_get_response(pn532_handle_t pn532, uint8_t command, uint8_t* data, siz
     while (1)
     {
         rc = uart_read_bytes(pn532->port, &header, sizeof(header), rsp_timeout);
+        statsd_value("pn532_getResponse_readBytes",rc);
         if (rc <= 0) {
             return rc;
         }
@@ -248,6 +250,7 @@ int pn532_get_passive_target(pn532_handle_t pn532, uint8_t* data, size_t data_le
     uint8_t rsp_buffer[30] = {0};
     int rc = pn532_get_response(pn532, PN532_COMMAND_INLISTPASSIVETARGET, rsp_buffer, sizeof(rsp_buffer), timeout);
     if (rc <= 0) {
+        statsd_inc("pn532_rcLTE0");
         return rc;
     }
 
@@ -425,6 +428,7 @@ static void pn532_task(void* arg)
             ESP_LOGE(TAG, "Error iistening for targets");
             pn532->tag_was_present_last_time = false;
             continue;
+            statsd_inc("pn532_errorListening");
         }
 
         pn532_event_tag_scanned_data_t tag_scanned_evt = {
@@ -436,18 +440,21 @@ static void pn532_task(void* arg)
         if (num_read == 0) {
             ESP_LOGI(TAG, "No card found");
             pn532->tag_was_present_last_time = false;
+            statsd_inc("pn532_noCard");
             continue;
         }
 
         if (num_read < 0) {
             ESP_LOGE(TAG, "Error reading card");
             pn532->tag_was_present_last_time = false;
+            statsd_inc("pn532_errorReading");
             continue;
         }
 
         if (num_read != 4) {
             ESP_LOGE(TAG, "Card UID not 4 bytes");
             pn532->tag_was_present_last_time = false;
+            statsd_inc("pn532_notFour");
             continue;
         }
 
@@ -455,6 +462,7 @@ static void pn532_task(void* arg)
         {
             esp_event_post_to(pn532->event_handle, PN532_EVENTS, PN532_EVENT_TAG_SCANNED, &tag_scanned_evt, sizeof(tag_scanned_evt), portMAX_DELAY);
             pn532->tag_was_present_last_time = true;
+            statsd_inc("pn532_post");
         }
 
         delay_interval_ms *= 2; // Rate limit next scan
