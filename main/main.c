@@ -202,7 +202,7 @@ void app_main(void)
         .event_handle = app_events,
         .uart = {
             .rw_timeout_ms = 500,
-            .port = UART_NUM_2,
+            .port = UART_NUM_0,
             .rx_gpio = UART_PIN_NO_CHANGE,
             .tx_gpio = UART_PIN_NO_CHANGE,
         }
