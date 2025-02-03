@@ -35,6 +35,17 @@ menu "Access controller configuration"
         default 2048
         help
             Stack size of the NFC task
+    
+    config SYSLOG_IP
+        string "Syslog IP Address"
+        default "10.0.0.1"
+        help
+            The IP address of a syslog server for logging.
 
+    config SYSLOG_PORT
+        int "Syslog Port"
+        default 514
+        help
+            The UDP port number for syslog
 
 endmenu

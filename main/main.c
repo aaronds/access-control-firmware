@@ -10,6 +10,7 @@
 #include "pn532.h"
 #include "status_indicator.h"
 #include "gpio_control.h"
+#include "syslog.h"
 
 static const char* TAG = "main";
 
@@ -140,6 +141,10 @@ void app_main(void)
     ESP_ERROR_CHECK(http_api_init());
 
     status_indicator_init();
+
+    syslog_udp_init();
+    esp_log_set_vprintf(&syslog_vprintf);
+    esp_log_level_set("*", ESP_LOG_INFO);
 
     for (int ota_attempts = 0; ota_attempts < 5; ota_attempts++) {
         char update_url[128] = {0};
