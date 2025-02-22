@@ -11,26 +11,17 @@
 #include "status_indicator.h"
 #include "gpio_control.h"
 #include "syslog.h"
+#include "controller_mode.h"
 
 static const char* TAG = "main";
 
-typedef enum {
-    CONTROLLER_MODE_INITIALISING,
-    CONTROLLER_MODE_LOCKED,
-    CONTROLLER_MODE_UNLOCKED,
-    CONTROLLER_MODE_IN_USE,
-    CONTROLLER_MODE_AWAIT_INDUCTOR,
-    CONTROLLER_MODE_ENROLL,
-} controller_mode_t;
-
-static controller_mode_t controller_mode = CONTROLLER_MODE_INITIALISING;
 static uint8_t inductor_tag[4];
 
 void controller_lock(void)
 {
     status_indicator_idle();
     gpio_set_relay(false);
-    controller_mode = CONTROLLER_MODE_LOCKED;
+    controller_mode_set(CONTROLLER_MODE_LOCKED);
 }
 
 void controller_try_unlock(pn532_event_tag_scanned_data_t* tag)
@@ -39,7 +30,7 @@ void controller_try_unlock(pn532_event_tag_scanned_data_t* tag)
     if (ret == ESP_OK) {
         status_indicator_output_on();
         gpio_set_relay(true);
-        controller_mode = CONTROLLER_MODE_UNLOCKED;
+        controller_mode_set(CONTROLLER_MODE_UNLOCKED);
     } else {
         status_indicator_error_brief();
     }
@@ -48,7 +39,7 @@ void controller_try_unlock(pn532_event_tag_scanned_data_t* tag)
 void controller_await_inductor(void)
 {
     status_indicator_await_inductor();
-    controller_mode = CONTROLLER_MODE_AWAIT_INDUCTOR;
+    controller_mode_set(CONTROLLER_MODE_AWAIT_INDUCTOR);
 }
 
 void controller_verify_inductor(pn532_event_tag_scanned_data_t* tag)
@@ -57,7 +48,7 @@ void controller_verify_inductor(pn532_event_tag_scanned_data_t* tag)
     if (ret == ESP_OK) {
         status_indicator_enroll();
         memcpy(inductor_tag, tag->data, sizeof(tag->data));
-        controller_mode = CONTROLLER_MODE_ENROLL;
+        controller_mode_set(CONTROLLER_MODE_ENROLL);
     } else {
         status_indicator_error_brief();
     }
@@ -74,7 +65,7 @@ void controller_enroll_member(pn532_event_tag_scanned_data_t* tag)
     esp_err_t ret = http_api_enroll(inductor_tag, sizeof(inductor_tag), tag->data, sizeof(tag->data));
     if (ret == ESP_OK) {
         status_indicator_enroll_success();
-        controller_mode = CONTROLLER_MODE_ENROLL;
+        controller_mode_set(CONTROLLER_MODE_ENROLL);
     } else {
         status_indicator_error_brief();
     }
@@ -125,6 +116,20 @@ void on_button_released(void* handler_arg, esp_event_base_t base, int32_t id, vo
     }
 }
 
+void on_controller_mode_pn532_pause(void* handler_arg, esp_event_base_t base, int32_t id, void* event_data) {
+    pn532_handle_t pn532 = (pn532_handle_t) handler_arg;
+    
+    switch(controller_mode) {
+        case CONTROLLER_MODE_UNLOCKED:
+        case CONTROLLER_MODE_IN_USE:
+            pn532_pause(pn532);
+            break;
+        default:
+            pn532_start(pn532);
+            break;
+    }
+}
+
 void app_main(void)
 {
     esp_err_t ret = nvs_flash_init();
@@ -145,6 +150,7 @@ void app_main(void)
     syslog_udp_init();
     esp_log_set_vprintf(&syslog_vprintf);
     esp_log_level_set("*", ESP_LOG_INFO);
+
 
     for (int ota_attempts = 0; ota_attempts < 5; ota_attempts++) {
         char update_url[128] = {0};
@@ -183,6 +189,10 @@ void app_main(void)
     esp_event_handler_register_with(app_events, GPIO_EVENTS, GPIO_EVENT_BUTTON_PRESS, on_button_pressed, NULL);
     esp_event_handler_register_with(app_events, GPIO_EVENTS, GPIO_EVENT_BUTTON_RELEASE, on_button_released, NULL);
 
+    
+    controller_mode_init(app_events);
+    controller_mode_set(CONTROLLER_MODE_INITIALISING);
+
     pn532_config_t pn532_config = {
         .task_priority = tskIDLE_PRIORITY,
         .task_stack_size = CONFIG_NFC_TASK_STACK_SIZE,
@@ -199,6 +209,8 @@ void app_main(void)
     pn532_handle_t pn532 = NULL;
     ESP_ERROR_CHECK(pn532_create(&pn532_config, &pn532));
     ESP_ERROR_CHECK(pn532_start(pn532));
+    
+    esp_event_handler_register_with(app_events, CONTROLLER_MODE_EVENTS, CONTROLLER_MODE_EVENT_ANY, on_controller_mode_pn532_pause, pn532);
 
     ESP_ERROR_CHECK(gpio_control_init(app_events));
 

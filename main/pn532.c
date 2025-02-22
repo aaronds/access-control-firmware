@@ -42,6 +42,7 @@ void pn532_wakeup(pn532_handle_t pn532)
     uart_write_bytes(pn532->port, data, sizeof(data));
 }
 
+
 esp_err_t pn532_send_command(pn532_handle_t pn532, uint8_t command, uint8_t* data, size_t data_len)
 {
     ESP_LOGD(TAG, "pn532_send_command %x", (unsigned int)command);
@@ -219,6 +220,16 @@ esp_err_t pn532_firmware_version(pn532_handle_t pn532, uint8_t* ic, uint8_t* ver
     return ESP_OK;
 }
 
+esp_err_t pn532_power_down(pn532_handle_t pn532) {
+    int rc = pn532_send_command(pn532, PN532_COMMAND_POWERDOWN, NULL, 0);
+
+    if (rc) {
+        return rc;
+    }
+
+    return ESP_OK;
+}
+
 esp_err_t pn532_sam_config(pn532_handle_t pn532)
 {
     // Send SAM configuration command with configuration for:
@@ -365,12 +376,20 @@ esp_err_t pn532_start(pn532_handle_t pn532)
 
 esp_err_t pn532_pause(pn532_handle_t pn532)
 {
+    esp_err_t ret = ESP_OK;
+
     if(! pn532) {
         return ESP_ERR_INVALID_ARG;
     }
 
     if(! pn532->scanning) {
         return ESP_OK;
+    }
+
+    ret = pn532_power_down(pn532);
+
+    if (ret) {
+        ESP_LOGE(TAG, "Error powering down.");
     }
 
     pn532->scanning = false;
