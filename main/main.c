@@ -11,6 +11,7 @@
 #include "status_indicator.h"
 #include "gpio_control.h"
 #include "syslog.h"
+#include "monitor.h"
 
 static const char* TAG = "main";
 
@@ -203,6 +204,14 @@ void app_main(void)
     ESP_ERROR_CHECK(gpio_control_init(app_events));
 
     controller_lock();
+
+    if (monitor_init() == ESP_OK) {
+        ESP_LOGI(TAG, "Monitor Init OK");
+    } else {
+        ESP_LOGI(TAG, "Monitor Init Failed");
+    }
+
+    monitor_start();
 
     while (1)
     {
