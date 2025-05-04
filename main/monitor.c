@@ -33,6 +33,10 @@ adc_cali_handle_t monitor_adc_cali = NULL;
 int64_t adc_last_conv_start = 0;
 int64_t adc_last_conv_time = 0;
 
+int64_t monitor_zx_last = 0;
+
+/*Width: 700-800*/
+
 static bool IRAM_ATTR monitor_timer_alarm(gptimer_handle_t timer, const gptimer_alarm_event_data_t *edata, void *user_data) {
     BaseType_t high_task_awoken = pdFALSE;
 
@@ -61,14 +65,20 @@ static bool IRAM_ATTR monitor_adc_conv_done(adc_continuous_handle_t handle, cons
     return high_task_awoken == pdTRUE;
 }
 
-static void IRAM_ATTR monitor_zx_isr_handler(void* arg) {
-    if (monitor_voltage_time < 100 || monitor_voltage_time > 300) {
-        monitor_voltage_time = 0;
-    } else {
-        monitor_voltage_time = 200;
+static void IRAM_ATTR monitor_zx_isr_handler(void* arg) { 
+    int64_t now = esp_timer_get_time();
+
+    if (monitor_zx_last > 0 && now - monitor_zx_last > 1000) {
+        if (monitor_voltage_time < 100 || monitor_voltage_time > 300) {
+            monitor_voltage_time = 0;
+        } else {
+            monitor_voltage_time = 200;
+        }
+
+        monitor_zx_count++;
     }
 
-    monitor_zx_count++;
+    monitor_zx_last = now;
 }
 
 esp_err_t monitor_init() {
