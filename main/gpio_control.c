@@ -15,6 +15,8 @@ static const char* TAG = "gpio";
 #define BUTTON_GPIO_PIN (4)
 #define DEBOUNCE_INTERVAL_MS (100)
 
+/*GPIO for zero cross in monitor.c*/
+
 static esp_event_loop_handle_t gpio_event_handle;
 
 static StaticTimer_t debounce_timer_buffer;

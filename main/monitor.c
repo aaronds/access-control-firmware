@@ -1,20 +1,26 @@
 #include "monitor.h"
+#include "driver/gpio.h"
 #include "driver/gptimer.h"
 #include "esp_adc/adc_continuous.h"
 #include "esp_adc/adc_cali.h"
 #include "esp_adc/adc_cali_scheme.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include <string.h>
 
 static const char* TAG = "monitor";
 
 unsigned int monitor_voltage[] = {0,4,7,11,14,18,22,25,29,32,36,40,43,47,50,54,57,61,64,68,71,75,78,81,85,88,91,95,98,101,104,108,111,114,117,120,123,126,129,132,135,138,141,144,147,149,152,155,157,160,163,165,168,170,173,175,177,179,182,184,186,188,190,192,194,196,198,200,202,203,205,207,208,210,211,212,214,215,216,218,219,220,221,222,223,224,224,225,226,227,227,228,228,229,229,229,230,230,230,230,230,230,230,230,230,229,229,229,228,228,227,227,226,225,224,224,223,222,221,220,219,218,216,215,214,212,211,210,208,207,205,203,202,200,198,196,194,192,190,188,186,184,182,179,177,175,173,170,168,165,163,160,157,155,152,149,147,144,141,138,135,132,129,126,123,120,117,114,111,108,104,101,98,95,91,88,85,81,78,75,71,68,64,61,57,54,50,47,43,40,36,32,29,25,22,18,14,11,7,4,0,4,7,11,14,18,22,25,29,32,36,40,43,47,50,54,57,61,64,68,71,75,78,81,85,88,91,95,98,101,104,108,111,114,117,120,123,126,129,132,135,138,141,144,147,149,152,155,157,160,163,165,168,170,173,175,177,179,182,184,186,188,190,192,194,196,198,200,202,203,205,207,208,210,211,212,214,215,216,218,219,220,221,222,223,224,224,225,226,227,227,228,228,229,229,229,230,230,230,230,230,230,230,230,230,229,229,229,228,228,227,227,226,225,224,224,223,222,221,220,219,218,216,215,214,212,211,210,208,207,205,203,202,200,198,196,194,192,190,188,186,184,182,179,177,175,173,170,168,165,163,160,157,155,152,149,147,144,141,138,135,132,129,126,123,120,117,114,111,108,104,101,98,95,91,88,85,81,78,75,71,68,64,61,57,54,50,47,43,40,36,32,29,25,22,18,14,11,7,4,0};
 unsigned int monitor_voltage_time = 0;
+unsigned int monitor_zx_count = 0;
+unsigned int monitor_zx_count_last = 0;
 unsigned int monitor_buffer_idx = 0;
 bool monitor_started = false;
 
 #define MONITOR_CONV_FRAME_SIZE 400
 #define MONITOR_CONV_FRAME_BYTES sizeof(adc_digi_output_data_t) * MONITOR_CONV_FRAME_SIZE
+
+#define ZX_GPIO_PIN (12) 
 
 uint8_t monitor_result[MONITOR_CONV_FRAME_BYTES] = {0};
 
@@ -23,6 +29,9 @@ TaskHandle_t monitor_task;
 gptimer_handle_t monitor_timer = NULL;
 adc_continuous_handle_t monitor_adc = NULL;
 adc_cali_handle_t monitor_adc_cali = NULL;
+
+int64_t adc_last_conv_start = 0;
+int64_t adc_last_conv_time = 0;
 
 static bool IRAM_ATTR monitor_timer_alarm(gptimer_handle_t timer, const gptimer_alarm_event_data_t *edata, void *user_data) {
     BaseType_t high_task_awoken = pdFALSE;
@@ -35,9 +44,31 @@ static bool IRAM_ATTR monitor_timer_alarm(gptimer_handle_t timer, const gptimer_
 static bool IRAM_ATTR monitor_adc_conv_done(adc_continuous_handle_t handle, const adc_continuous_evt_data_t *edata, void *user_data) {
     BaseType_t high_task_awoken = pdFALSE;
 
+    monitor_zx_count_last = monitor_zx_count;
+    monitor_zx_count = 0;
+
+    int64_t now = esp_timer_get_time();
+
+    if (adc_last_conv_start > 0) {
+        adc_last_conv_time = now - adc_last_conv_start;
+    }
+
+    adc_last_conv_start = now;
+        
+
     vTaskNotifyGiveFromISR(monitor_task, &high_task_awoken);
 
     return high_task_awoken == pdTRUE;
+}
+
+static void IRAM_ATTR monitor_zx_isr_handler(void* arg) {
+    if (monitor_voltage_time < 100 || monitor_voltage_time > 300) {
+        monitor_voltage_time = 0;
+    } else {
+        monitor_voltage_time = 200;
+    }
+
+    monitor_zx_count++;
 }
 
 esp_err_t monitor_init() {
@@ -64,14 +95,14 @@ esp_err_t monitor_init() {
     ESP_ERROR_CHECK(gptimer_enable(monitor_timer));
 
     adc_continuous_handle_cfg_t adc_config = {
-        .max_store_buf_size = MONITOR_CONV_FRAME_SIZE * 2,
-        .conv_frame_size = MONITOR_CONV_FRAME_SIZE 
+        .max_store_buf_size = MONITOR_CONV_FRAME_BYTES * 2,
+        .conv_frame_size = MONITOR_CONV_FRAME_BYTES
     };
 
     ESP_ERROR_CHECK(adc_continuous_new_handle(&adc_config, &monitor_adc));
 
     adc_continuous_config_t dig_cfg = {
-        .sample_freq_hz = 20000,
+        .sample_freq_hz = 24500,
         .conv_mode = ADC_CONV_SINGLE_UNIT_1,
         .format = ADC_DIGI_OUTPUT_FORMAT_TYPE1,
         .pattern_num = 1
@@ -103,6 +134,16 @@ esp_err_t monitor_init() {
     ESP_ERROR_CHECK(adc_cali_create_scheme_line_fitting(&adc_cali_config, &monitor_adc_cali));
 
     xTaskCreate(monitor_handle_buffer, "Monitor", 2048, NULL, 1, &monitor_task);
+
+
+    gpio_config_t zx_conf = {0};
+    zx_conf.intr_type = GPIO_INTR_NEGEDGE;
+    zx_conf.pin_bit_mask = (1ULL << ZX_GPIO_PIN);
+    zx_conf.mode = GPIO_MODE_INPUT;
+    zx_conf.pull_down_en = 0;
+    zx_conf.pull_up_en = 1;
+    gpio_config(&zx_conf);
+    gpio_isr_handler_add(ZX_GPIO_PIN, monitor_zx_isr_handler, NULL);
 
     return ESP_OK;
 }
@@ -191,10 +232,10 @@ void monitor_handle_buffer(){
         count++;
 
         if (count >= 100) {
-            milli_watt_seconds = (energy_total / 100);
+            milli_watt_seconds = ((energy_total / 100) / (400 * 50));
             average_power = milli_watt_seconds / 2;
 
-            ESP_LOGI(TAG, "mWs: %ld, mW: %ld", milli_watt_seconds, average_power);
+            ESP_LOGI(TAG, "mWs: %ld, mW: %ld lADCr: %d ADCv: %d vTime: %d ADCrc: %ld ZXc:%d adcPeriod: %lld", milli_watt_seconds, average_power, adc_result_value, voltage, monitor_voltage_result_time, adc_result_count, monitor_zx_count_last, adc_last_conv_time);
             
             energy_total = 0;
             count = 0;
