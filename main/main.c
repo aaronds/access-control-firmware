@@ -26,6 +26,47 @@ typedef enum {
 static controller_mode_t controller_mode = CONTROLLER_MODE_INITIALISING;
 static uint8_t inductor_tag[4];
 
+TaskHandle_t status_task_handle;
+
+void status_task(void *arg) {
+    char statusChar;
+
+    while(true) {
+        switch (controller_mode) {
+            case CONTROLLER_MODE_INITIALISING:
+                statusChar = 'I';
+                break;
+
+            case CONTROLLER_MODE_LOCKED:
+                statusChar = 'L';
+                break;
+
+            case CONTROLLER_MODE_UNLOCKED:
+                statusChar = 'U';
+                break;
+
+            case CONTROLLER_MODE_IN_USE:
+                statusChar = 'A';
+                break;
+
+            case CONTROLLER_MODE_AWAIT_INDUCTOR:
+                statusChar = 'D';
+                break;
+
+            case CONTROLLER_MODE_ENROLL:
+                statusChar = 'E';
+                break;
+
+            default:
+                statusChar = 'X';
+                break;
+        }
+
+        ESP_LOGI(TAG, "status=%c", statusChar);
+        vTaskDelay(30000/portTICK_PERIOD_MS);
+    }
+}
+
 void controller_lock(void)
 {
     status_indicator_idle();
@@ -201,6 +242,8 @@ void app_main(void)
     ESP_ERROR_CHECK(pn532_start(pn532));
 
     ESP_ERROR_CHECK(gpio_control_init(app_events));
+
+    xTaskCreate(status_task, "status_task", 1024, NULL, tskIDLE_PRIORITY, &status_task_handle); 
 
     controller_lock();
 
