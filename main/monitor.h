@@ -17,7 +17,7 @@
 #define MONITOR_TIMER_DIVIDER 80 * 500
 #define MONITOR_TIMER_ALARM 20
 
-#define MONITOR_ZERO_AMPS 1641
+#define MONITOR_ZERO_AMPS 1630
 #define MONITOR_CURRENT_MV_PER_A 48
 
 // Inspired by https://www.toptal.com/embedded/esp32-audio-sampling
