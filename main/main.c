@@ -26,6 +26,13 @@ typedef enum {
 static controller_mode_t controller_mode = CONTROLLER_MODE_INITIALISING;
 static uint8_t inductor_tag[4];
 
+TaskHandle_t status_task_handle;
+
+void status_task(void *arg) {
+    ESP_LOGI(TAG, "mode: %d", controller_mode);
+    vTaskDelay(30000/portTICK_PERIOD_MS);
+}
+
 void controller_lock(void)
 {
     status_indicator_idle();
@@ -201,6 +208,8 @@ void app_main(void)
     ESP_ERROR_CHECK(pn532_start(pn532));
 
     ESP_ERROR_CHECK(gpio_control_init(app_events));
+
+    xTaskCreate(status_task, "status_task", 2048, NULL, tskIDLE_PRIORITY, &status_task_handle); 
 
     controller_lock();
 
