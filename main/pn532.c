@@ -419,10 +419,10 @@ static void pn532_task(void* arg)
 
         delay_interval_ms = pn532->scan_interval_ms;
 
-        ESP_LOGI(TAG, "Scanning for card");
+        ESP_LOGD(TAG, "Scanning for card");
         ret = pn532_listen_for_passive_target(pn532);
         if (ret < 0) {
-            ESP_LOGE(TAG, "Error iistening for targets");
+            ESP_LOGE(TAG, "Error listening for targets");
             pn532->tag_was_present_last_time = false;
             continue;
         }
@@ -434,7 +434,7 @@ static void pn532_task(void* arg)
 
         int num_read = pn532_get_passive_target(pn532, tag_scanned_evt.data, sizeof(tag_scanned_evt.data), delay_interval_ms/portTICK_PERIOD_MS);
         if (num_read == 0) {
-            ESP_LOGI(TAG, "No card found");
+            ESP_LOGD(TAG, "No card found");
             pn532->tag_was_present_last_time = false;
             continue;
         }
@@ -455,6 +455,7 @@ static void pn532_task(void* arg)
         {
             esp_event_post_to(pn532->event_handle, PN532_EVENTS, PN532_EVENT_TAG_SCANNED, &tag_scanned_evt, sizeof(tag_scanned_evt), portMAX_DELAY);
             pn532->tag_was_present_last_time = true;
+            ESP_LOGI(TAG, "Card event posted");
         }
 
         delay_interval_ms *= 2; // Rate limit next scan

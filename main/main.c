@@ -27,11 +27,57 @@ typedef enum {
 static controller_mode_t controller_mode = CONTROLLER_MODE_INITIALISING;
 static uint8_t inductor_tag[4];
 
+TaskHandle_t status_task_handle;
+
+void status_task(void *arg) {
+    char statusChar;
+
+    while(true) {
+        switch (controller_mode) {
+            case CONTROLLER_MODE_INITIALISING:
+                statusChar = 'I';
+                break;
+
+            case CONTROLLER_MODE_LOCKED:
+                statusChar = 'L';
+                break;
+
+            case CONTROLLER_MODE_UNLOCKED:
+                statusChar = 'U';
+                break;
+
+            case CONTROLLER_MODE_IN_USE:
+                statusChar = 'A';
+                break;
+
+            case CONTROLLER_MODE_AWAIT_INDUCTOR:
+                statusChar = 'D';
+                break;
+
+            case CONTROLLER_MODE_ENROLL:
+                statusChar = 'E';
+                break;
+
+            default:
+                statusChar = 'X';
+                break;
+        }
+
+        ESP_LOGI(TAG, "status=%c", statusChar);
+        ulTaskNotifyTake(pdTRUE, 30000/portTICK_PERIOD_MS);
+    }
+}
+
+void controller_mode_set(controller_mode_t mode_new) {
+   controller_mode = mode_new;
+   xTaskNotifyGive(status_task_handle);
+}
+
 void controller_lock(void)
 {
     status_indicator_idle();
     gpio_set_relay(false);
-    controller_mode = CONTROLLER_MODE_LOCKED;
+    controller_mode_set(CONTROLLER_MODE_LOCKED);
 }
 
 void controller_try_unlock(pn532_event_tag_scanned_data_t* tag)
@@ -40,7 +86,8 @@ void controller_try_unlock(pn532_event_tag_scanned_data_t* tag)
     if (ret == ESP_OK) {
         status_indicator_output_on();
         gpio_set_relay(true);
-        controller_mode = CONTROLLER_MODE_UNLOCKED;
+        controller_mode_set(CONTROLLER_MODE_UNLOCKED);
+
     } else {
         status_indicator_error_brief();
     }
@@ -49,7 +96,7 @@ void controller_try_unlock(pn532_event_tag_scanned_data_t* tag)
 void controller_await_inductor(void)
 {
     status_indicator_await_inductor();
-    controller_mode = CONTROLLER_MODE_AWAIT_INDUCTOR;
+    controller_mode_set(CONTROLLER_MODE_AWAIT_INDUCTOR);
 }
 
 void controller_verify_inductor(pn532_event_tag_scanned_data_t* tag)
@@ -58,7 +105,7 @@ void controller_verify_inductor(pn532_event_tag_scanned_data_t* tag)
     if (ret == ESP_OK) {
         status_indicator_enroll();
         memcpy(inductor_tag, tag->data, sizeof(tag->data));
-        controller_mode = CONTROLLER_MODE_ENROLL;
+        controller_mode_set(CONTROLLER_MODE_ENROLL);
     } else {
         status_indicator_error_brief();
     }
@@ -75,7 +122,7 @@ void controller_enroll_member(pn532_event_tag_scanned_data_t* tag)
     esp_err_t ret = http_api_enroll(inductor_tag, sizeof(inductor_tag), tag->data, sizeof(tag->data));
     if (ret == ESP_OK) {
         status_indicator_enroll_success();
-        controller_mode = CONTROLLER_MODE_ENROLL;
+        controller_mode_set(CONTROLLER_MODE_ENROLL);
     } else {
         status_indicator_error_brief();
     }
@@ -202,6 +249,8 @@ void app_main(void)
     ESP_ERROR_CHECK(pn532_start(pn532));
 
     ESP_ERROR_CHECK(gpio_control_init(app_events));
+
+    xTaskCreate(status_task, "status_task", 1024, NULL, tskIDLE_PRIORITY, &status_task_handle); 
 
     controller_lock();
 
