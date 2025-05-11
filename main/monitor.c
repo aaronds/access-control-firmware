@@ -10,6 +10,11 @@
 
 static const char* TAG = "monitor";
 
+ESP_EVENT_DEFINE_BASE(MONITOR_EVENTS);
+
+monitor_state_t monitor_event;
+esp_event_loop_handle_t monitor_event_handle;
+
 unsigned int monitor_voltage[] = {0,4,7,11,14,18,22,25,29,32,36,40,43,47,50,54,57,61,64,68,71,75,78,81,85,88,91,95,98,101,104,108,111,114,117,120,123,126,129,132,135,138,141,144,147,149,152,155,157,160,163,165,168,170,173,175,177,179,182,184,186,188,190,192,194,196,198,200,202,203,205,207,208,210,211,212,214,215,216,218,219,220,221,222,223,224,224,225,226,227,227,228,228,229,229,229,230,230,230,230,230,230,230,230,230,229,229,229,228,228,227,227,226,225,224,224,223,222,221,220,219,218,216,215,214,212,211,210,208,207,205,203,202,200,198,196,194,192,190,188,186,184,182,179,177,175,173,170,168,165,163,160,157,155,152,149,147,144,141,138,135,132,129,126,123,120,117,114,111,108,104,101,98,95,91,88,85,81,78,75,71,68,64,61,57,54,50,47,43,40,36,32,29,25,22,18,14,11,7,4,0,4,7,11,14,18,22,25,29,32,36,40,43,47,50,54,57,61,64,68,71,75,78,81,85,88,91,95,98,101,104,108,111,114,117,120,123,126,129,132,135,138,141,144,147,149,152,155,157,160,163,165,168,170,173,175,177,179,182,184,186,188,190,192,194,196,198,200,202,203,205,207,208,210,211,212,214,215,216,218,219,220,221,222,223,224,224,225,226,227,227,228,228,229,229,229,230,230,230,230,230,230,230,230,230,229,229,229,228,228,227,227,226,225,224,224,223,222,221,220,219,218,216,215,214,212,211,210,208,207,205,203,202,200,198,196,194,192,190,188,186,184,182,179,177,175,173,170,168,165,163,160,157,155,152,149,147,144,141,138,135,132,129,126,123,120,117,114,111,108,104,101,98,95,91,88,85,81,78,75,71,68,64,61,57,54,50,47,43,40,36,32,29,25,22,18,14,11,7,4,0};
 unsigned int monitor_voltage_time = 0;
 unsigned int monitor_zx_count = 0;
@@ -81,7 +86,9 @@ static void IRAM_ATTR monitor_zx_isr_handler(void* arg) {
     monitor_zx_last = now;
 }
 
-esp_err_t monitor_init() {
+esp_err_t monitor_init(esp_event_loop_handle_t event_handle) {
+
+    monitor_event_handle = event_handle;
     
     gptimer_config_t timer_config = {
         .clk_src = GPTIMER_CLK_SRC_DEFAULT,
@@ -207,7 +214,7 @@ void monitor_handle_buffer(){
         int adc_status = adc_continuous_read(monitor_adc, monitor_result, MONITOR_CONV_FRAME_BYTES, &adc_results, 0);
 
         if (adc_status != ESP_OK) {
-            ESP_LOGI(TAG, "ADC Status Not OK: %d", adc_status);
+            ESP_LOGE(TAG, "ADC Status Not OK: %d", adc_status);
             continue;
         }
 
@@ -245,7 +252,19 @@ void monitor_handle_buffer(){
             milli_watt_seconds = ((energy_total / 100) / (400 * 50));
             average_power = milli_watt_seconds / 2;
 
-            ESP_LOGI(TAG, "mWs: %ld, mW: %ld lADCr: %d ADCv: %d vTime: %d ADCrc: %ld ZXc:%d adcPeriod: %lld", milli_watt_seconds, average_power, adc_result_value, voltage, monitor_voltage_result_time, adc_result_count, monitor_zx_count_last, adc_last_conv_time);
+            if (monitor_zx_count_last > 0 || monitor_event.is_on) {
+                monitor_event.energy = milli_watt_seconds;
+                monitor_event.power = average_power;
+            } else {
+                monitor_event.energy = 0;
+                monitor_event.power = 0;
+            }
+
+            monitor_event.is_on = monitor_zx_count_last > 0;
+
+            esp_event_post_to(monitor_event_handle, MONITOR_EVENTS, MONITOR_EVENT_STATE, &monitor_event, sizeof(monitor_event), portMAX_DELAY);
+
+            ESP_LOGD(TAG, "mWs: %ld, mW: %ld lADCr: %d ADCv: %d vTime: %d ADCrc: %ld ZXc:%d adcPeriod: %lld", milli_watt_seconds, average_power, adc_result_value, voltage, monitor_voltage_result_time, adc_result_count, monitor_zx_count_last, adc_last_conv_time);
             
             energy_total = 0;
             count = 0;

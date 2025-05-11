@@ -9,6 +9,8 @@
 #include <soc/sens_reg.h>
 #include <soc/sens_struct.h>
 
+ESP_EVENT_DECLARE_BASE(MONITOR_EVENTS);
+
 #define MONITOR_ADC_CHANNEL 6
 #define MONITOR_MAINS_V 230
 #define MONITOR_MAINS_FREQ 50
@@ -20,10 +22,21 @@
 #define MONITOR_ZERO_AMPS 1630
 #define MONITOR_CURRENT_MV_PER_A 48
 
-// Inspired by https://www.toptal.com/embedded/esp32-audio-sampling
-
-
 esp_err_t monitor_init();
 esp_err_t monitor_start();
 esp_err_t monitor_stop();
 void monitor_handle_buffer();
+
+typedef struct {
+    uint32_t energy;
+    uint32_t power;
+    bool is_on;
+} monitor_state_t;
+
+typedef enum {
+    MONITOR_EVENT_ANY = ESP_EVENT_ANY_ID,
+    MONITOR_EVENT_NONE,
+    MONITOR_EVENT_STATE
+} monitor_event_t;
+
+extern esp_event_loop_handle_t monitor_event_handle;

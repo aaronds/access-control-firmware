@@ -144,6 +144,53 @@ cleanup:
     return ret;
 }
 
+esp_err_t http_api_settings(unsigned int *threshold, unsigned int *timeout) 
+{
+    esp_err_t ret;
+
+    size_t url_len = snprintf(url_buf, sizeof(url_buf), CONFIG_BASE_URL "/api/machines/%s/settings", mac_str);
+
+    http_rest_recv_json_t response_buffer = {0};
+    ret = http_rest_client_get_json(url_buf, &response_buffer);
+
+    if (ret != ESP_OK) {
+        goto cleanup;
+    }
+
+    if (response_buffer.status_code != 200){
+        ESP_LOGE(TAG, "an http error occured: %d", response_buffer.status_code);
+        ret = ESP_FAIL;
+        goto cleanup;
+    }
+
+    if (!cJSON_IsObject(response_buffer.json))
+    {
+        goto cleanup;
+    }
+
+    cJSON *idle_timeout_json = cJSON_GetObjectItemCaseSensitive(response_buffer.json, "idle_timeout");
+    double idle_timeout = cJSON_GetNumberValue(idle_timeout_json);
+
+    if (idle_timeout < 0.01) {
+        *timeout = 0; 
+    } else {
+        *timeout = (unsigned int) idle_timeout; 
+    }
+
+    cJSON *idle_power_threshold_json = cJSON_GetObjectItemCaseSensitive(response_buffer.json, "idle_power_threshold");
+    double idle_power_threshold = cJSON_GetNumberValue(idle_power_threshold_json);
+    
+    if (idle_power_threshold < 0.01) {
+        *threshold = 0;
+    } else {
+        *threshold = (unsigned int) idle_power_threshold;
+    }
+
+cleanup:
+    http_rest_client_cleanup_json(&response_buffer);
+    return ret;
+}
+
 esp_err_t http_api_has_update(char* out_url, size_t out_url_len)
 {
     esp_err_t ret = ESP_OK;
