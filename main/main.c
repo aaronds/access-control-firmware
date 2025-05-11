@@ -63,15 +63,20 @@ void status_task(void *arg) {
         }
 
         ESP_LOGI(TAG, "status=%c", statusChar);
-        vTaskDelay(30000/portTICK_PERIOD_MS);
+        ulTaskNotifyTake(pdTRUE, 30000/portTICK_PERIOD_MS);
     }
+}
+
+void controller_mode_set(controller_mode_t mode_new) {
+   controller_mode = mode_new;
+   xTaskNotifyGive(status_task_handle);
 }
 
 void controller_lock(void)
 {
     status_indicator_idle();
     gpio_set_relay(false);
-    controller_mode = CONTROLLER_MODE_LOCKED;
+    controller_mode_set(CONTROLLER_MODE_LOCKED);
 }
 
 void controller_try_unlock(pn532_event_tag_scanned_data_t* tag)
@@ -80,7 +85,8 @@ void controller_try_unlock(pn532_event_tag_scanned_data_t* tag)
     if (ret == ESP_OK) {
         status_indicator_output_on();
         gpio_set_relay(true);
-        controller_mode = CONTROLLER_MODE_UNLOCKED;
+        controller_mode_set(CONTROLLER_MODE_UNLOCKED);
+
     } else {
         status_indicator_error_brief();
     }
@@ -89,7 +95,7 @@ void controller_try_unlock(pn532_event_tag_scanned_data_t* tag)
 void controller_await_inductor(void)
 {
     status_indicator_await_inductor();
-    controller_mode = CONTROLLER_MODE_AWAIT_INDUCTOR;
+    controller_mode_set(CONTROLLER_MODE_AWAIT_INDUCTOR);
 }
 
 void controller_verify_inductor(pn532_event_tag_scanned_data_t* tag)
@@ -98,7 +104,7 @@ void controller_verify_inductor(pn532_event_tag_scanned_data_t* tag)
     if (ret == ESP_OK) {
         status_indicator_enroll();
         memcpy(inductor_tag, tag->data, sizeof(tag->data));
-        controller_mode = CONTROLLER_MODE_ENROLL;
+        controller_mode_set(CONTROLLER_MODE_ENROLL);
     } else {
         status_indicator_error_brief();
     }
@@ -115,7 +121,7 @@ void controller_enroll_member(pn532_event_tag_scanned_data_t* tag)
     esp_err_t ret = http_api_enroll(inductor_tag, sizeof(inductor_tag), tag->data, sizeof(tag->data));
     if (ret == ESP_OK) {
         status_indicator_enroll_success();
-        controller_mode = CONTROLLER_MODE_ENROLL;
+        controller_mode_set(CONTROLLER_MODE_ENROLL);
     } else {
         status_indicator_error_brief();
     }
