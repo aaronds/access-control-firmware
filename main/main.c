@@ -82,6 +82,7 @@ void status_task(void *arg) {
         }
 
         ESP_LOGI(TAG, "status=%c is_on=%d energy_total=%ld power=%ld used=%d time_remaing=%d", statusChar, monitor_is_on, monitor_energy_total, monitor_power, controller_used, time_remaining);
+        monitor_energy_total = 0;
         ulTaskNotifyTake(pdTRUE, 30000/portTICK_PERIOD_MS);
     }
 }
@@ -318,8 +319,8 @@ void app_main(void)
     ret = http_api_settings(&controller_used_threshold, &controller_unlocked_timeout);
 
     if (ret != ESP_OK) {
-        controller_used_threshold = 0;
-        controller_unlocked_timeout = 0;
+        controller_used_threshold = 20;
+        controller_unlocked_timeout = 60;
     }
 
 

@@ -38,6 +38,11 @@ esp_err_t syslog_udp_init() {
         return ESP_FAIL;
     }
 
+    struct sockaddr_storage source_addr;
+    socklen_t socklen = sizeof(source_addr);
+
+    recvfrom(syslog_config.socket, syslog_config.syslog_message, SYSLOG_BUFFER_LEN - 1, 0, (struct sockaddr *)&source_addr, &socklen);
+
     return ESP_OK;
 }
 
