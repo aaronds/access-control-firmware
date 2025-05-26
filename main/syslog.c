@@ -29,19 +29,14 @@ esp_err_t syslog_udp_init() {
     syslog_config.server.sin_port = htons(CONFIG_SYSLOG_PORT);
 
     if(!inet_pton(AF_INET, CONFIG_SYSLOG_IP, &syslog_config.server.sin_addr)) {
-        ESP_LOGE(TAG, "syslog address error");
+        ESP_LOGE(TAG, "address error");
         return ESP_FAIL;
     }
 
     if ((syslog_config.socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1) {
-        ESP_LOGE(TAG, "syslog socket error");
+        ESP_LOGE(TAG, "socket error");
         return ESP_FAIL;
     }
-
-    struct sockaddr_storage source_addr;
-    socklen_t socklen = sizeof(source_addr);
-
-    recvfrom(syslog_config.socket, syslog_config.syslog_message, SYSLOG_BUFFER_LEN - 1, 0, (struct sockaddr *)&source_addr, &socklen);
 
     return ESP_OK;
 }

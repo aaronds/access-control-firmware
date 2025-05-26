@@ -48,4 +48,16 @@ menu "Access controller configuration"
         help
             The UDP port number for syslog
 
+    config MQTT_SN_IP
+        string "MQTT SN IP Address"
+        default "10.0.0.1"
+        help
+            The IP address of a mqtt-sn server.
+
+    config MQTT_SN_PORT
+        int "MQTT SN Port"
+        default 514
+        help
+            The UDP port number for mqtt-sn
+
 endmenu

@@ -13,6 +13,7 @@
 #include "gpio_control.h"
 #include "syslog.h"
 #include "monitor.h"
+#include "mqtt-sn.h"
 
 static const char* TAG = "main";
 
@@ -31,6 +32,13 @@ uint64_t controller_used_after_time = 0;
 unsigned int controller_used_threshold = 10;
 unsigned int controller_unlocked_timeout = 30;
 
+typedef struct {
+    char mode;
+    bool is_on;
+    bool is_used;
+    uint32_t time_remaining;
+} monitor_mode_t;
+
 bool controller_used = false;
 
 static uint8_t inductor_tag[4];
@@ -38,6 +46,8 @@ static uint8_t inductor_tag[4];
 uint32_t monitor_energy_total = 0;
 uint32_t monitor_power = 0;
 bool monitor_is_on = false;
+
+monitor_mode_t mode_message;
 
 TaskHandle_t status_task_handle;
 
@@ -78,11 +88,19 @@ void status_task(void *arg) {
         }
 
         if (controller_mode == CONTROLLER_MODE_UNLOCKED && controller_used && controller_unlocked_timeout > 0) { 
-            time_remaining = ((now - controller_used_after_time) / 10000) - controller_unlocked_timeout;
+            time_remaining = ((now - controller_used_after_time) / 100000) - controller_unlocked_timeout;
+        } else {
+            time_remaining = 0;
         }
 
         ESP_LOGI(TAG, "status=%c is_on=%d energy_total=%ld power=%ld used=%d time_remaing=%d", statusChar, monitor_is_on, monitor_energy_total, monitor_power, controller_used, time_remaining);
         monitor_energy_total = 0;
+        mode_message.is_on = monitor_is_on;
+        mode_message.is_used = controller_used;
+        mode_message.mode = statusChar;
+        mode_message.time_remaining = time_remaining;
+        mqtt_sn_send_with_mac(MQTT_SN_MESSAGE_MODE, &mode_message, sizeof(mode_message));
+
         ulTaskNotifyTake(pdTRUE, 30000/portTICK_PERIOD_MS);
     }
 }
@@ -243,7 +261,7 @@ void on_monitor_state(void *handler_arg, esp_event_base_t base, int32_t id, void
                 controller_mode_set(CONTROLLER_MODE_IN_USE);
 
             } else if (controller_used) {
-                unlocked_time = (controller_used_after_time - now) / 10000;
+                unlocked_time = (controller_used_after_time - now) / 100000;
 
                 if (unlocked_time > controller_unlocked_timeout) {
                     ESP_LOGE(TAG, "Timeout, unlocked after used. Turning Off");
@@ -267,6 +285,8 @@ void on_monitor_state(void *handler_arg, esp_event_base_t base, int32_t id, void
         default:
             break;
     }
+
+    mqtt_sn_send_with_mac(MQTT_SN_MESSAGE_POWER, &state, sizeof(state));
 }
 
 void app_main(void)
@@ -289,6 +309,8 @@ void app_main(void)
     syslog_udp_init();
     esp_log_set_vprintf(&syslog_vprintf);
     esp_log_level_set("*", ESP_LOG_INFO);
+
+    mqtt_sn_init();
 
     for (int ota_attempts = 0; ota_attempts < 5; ota_attempts++) {
         char update_url[128] = {0};
@@ -367,6 +389,8 @@ void app_main(void)
     }
 
     monitor_start();
+    int64_t now = esp_timer_get_time();
+    mqtt_sn_send_with_mac(MQTT_SN_MESSAGE_HELLO, &now, sizeof(now));
 
     while (1)
     {

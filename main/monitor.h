@@ -30,6 +30,9 @@ void monitor_handle_buffer();
 typedef struct {
     uint32_t energy;
     uint32_t power;
+    uint32_t time;
+    uint32_t current_max;
+    uint32_t zx;
     bool is_on;
 } monitor_state_t;
 
