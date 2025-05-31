@@ -33,10 +33,14 @@ unsigned int controller_used_threshold = 10;
 unsigned int controller_unlocked_timeout = 30;
 
 typedef struct {
-    char mode;
-    bool is_on;
-    bool is_used;
     uint32_t time_remaining;
+    uint32_t unlocked_timeout;
+    controller_mode_t mode;
+    struct {
+        bool is_on : 1;
+        bool is_used : 1;
+        bool monitor_enabled : 1;
+    } flags ;
 } monitor_mode_t;
 
 bool controller_used = false;
@@ -46,6 +50,7 @@ static uint8_t inductor_tag[4];
 uint32_t monitor_energy_total = 0;
 uint32_t monitor_power = 0;
 bool monitor_is_on = false;
+bool monitor_enabled = false;
 
 monitor_mode_t mode_message;
 
@@ -95,9 +100,11 @@ void status_task(void *arg) {
 
         ESP_LOGI(TAG, "status=%c is_on=%d energy_total=%ld power=%ld used=%d time_remaing=%d", statusChar, monitor_is_on, monitor_energy_total, monitor_power, controller_used, time_remaining);
         monitor_energy_total = 0;
-        mode_message.is_on = monitor_is_on;
-        mode_message.is_used = controller_used;
-        mode_message.mode = statusChar;
+        memset(&mode_message, 0, sizeof(mode_message));
+        mode_message.flags.is_on = monitor_is_on;
+        mode_message.flags.is_used = controller_used;
+        mode_message.flags.monitor_enabled = monitor_enabled; 
+        mode_message.mode = controller_mode;
         mode_message.time_remaining = time_remaining;
         mqtt_sn_send_with_mac(MQTT_SN_MESSAGE_MODE, &mode_message, sizeof(mode_message));
 
@@ -286,7 +293,8 @@ void on_monitor_state(void *handler_arg, esp_event_base_t base, int32_t id, void
             break;
     }
 
-    mqtt_sn_send_with_mac(MQTT_SN_MESSAGE_POWER, &state, sizeof(state));
+    ESP_LOGI(TAG, "energy: %ld, power: %ld, current_max: %ld, zx: %ld", state->energy, state->power, state->current_max, state->zx);
+    mqtt_sn_send_with_mac(MQTT_SN_MESSAGE_POWER, state, sizeof(monitor_state_t));
 }
 
 void app_main(void)
@@ -310,7 +318,6 @@ void app_main(void)
     esp_log_set_vprintf(&syslog_vprintf);
     esp_log_level_set("*", ESP_LOG_INFO);
 
-    mqtt_sn_init();
 
     for (int ota_attempts = 0; ota_attempts < 5; ota_attempts++) {
         char update_url[128] = {0};
@@ -337,6 +344,8 @@ void app_main(void)
         }
         break;
     }
+
+    mqtt_sn_init();
 
     ret = http_api_settings(&controller_used_threshold, &controller_unlocked_timeout);
 
@@ -382,13 +391,21 @@ void app_main(void)
 
     controller_lock();
 
-    if (monitor_init(app_events) == ESP_OK) {
-        ESP_LOGI(TAG, "Monitor Init OK");
+    monitor_enabled = monitor_detect();
+
+    if (monitor_enabled) {
+
+        if (monitor_init(app_events) == ESP_OK) {
+            ESP_LOGI(TAG, "Monitor Init OK");
+        } else {
+            ESP_LOGI(TAG, "Monitor Init Failed");
+        }
+
+        monitor_start();
     } else {
-        ESP_LOGI(TAG, "Monitor Init Failed");
+        ESP_LOGI(TAG, "Monitor not detected.");
     }
 
-    monitor_start();
     int64_t now = esp_timer_get_time();
     mqtt_sn_send_with_mac(MQTT_SN_MESSAGE_HELLO, &now, sizeof(now));
 

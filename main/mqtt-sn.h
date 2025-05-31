@@ -23,14 +23,18 @@ typedef struct {
     struct sockaddr_in server;
     int socket;
     uint8_t message_buffer[MQTT_SN_MSG_LEN];
+    uint8_t task_buffer[MQTT_SN_MSG_LEN];
     uint8_t mac[MACHINE_MAC_LEN];
-    uint16_t sequence;
     mqtt_sn_state_t state;
     TaskHandle_t task;
 } mqtt_sn_config_t;
 
 esp_err_t mqtt_sn_init();
+
+void mqtt_sn_connect();
+bool mqtt_sn_is_ready();
 void mqtt_sn_header_predefined(uint8_t *message, uint16_t topic,uint16_t length);
 void mqtt_sn_send(uint16_t topic, void *buff,size_t length);
 void mqtt_sn_send_with_mac(uint16_t topic, void *buff, size_t length);
+void mqtt_sn_task();
 

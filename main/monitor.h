@@ -22,6 +22,7 @@ ESP_EVENT_DECLARE_BASE(MONITOR_EVENTS);
 #define MONITOR_ZERO_AMPS 1630
 #define MONITOR_CURRENT_MV_PER_A 48
 
+bool monitor_detect();
 esp_err_t monitor_init();
 esp_err_t monitor_start();
 esp_err_t monitor_stop();
@@ -33,8 +34,14 @@ typedef struct {
     uint32_t time;
     uint32_t current_max;
     uint32_t zx;
+    uint16_t voltage;
+    uint8_t voltage_type;
     bool is_on;
 } monitor_state_t;
+
+typedef enum {
+    MONITOR_VOLTAGE_AC_RMS
+} monitor_voltage_t ;
 
 typedef enum {
     MONITOR_EVENT_ANY = ESP_EVENT_ANY_ID,

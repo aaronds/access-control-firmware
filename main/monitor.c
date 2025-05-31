@@ -1,6 +1,7 @@
 #include "monitor.h"
 #include "driver/gpio.h"
 #include "driver/gptimer.h"
+#include "esp_adc/adc_oneshot.h"
 #include "esp_adc/adc_continuous.h"
 #include "esp_adc/adc_cali.h"
 #include "esp_adc/adc_cali_scheme.h"
@@ -170,6 +171,27 @@ esp_err_t monitor_init(esp_event_loop_handle_t event_handle) {
     return ESP_OK;
 }
 
+bool monitor_detect() {
+    int raw = 0;
+
+    adc_oneshot_unit_handle_t adc2_handle;
+    adc_oneshot_unit_init_cfg_t init_config2 = {
+        .unit_id = ADC_UNIT_2,
+        .ulp_mode = ADC_ULP_MODE_DISABLE,
+    };
+
+    if (adc_oneshot_new_unit(&init_config2, &adc2_handle) != ESP_OK) {
+        return false;
+    }
+
+    adc_oneshot_read(adc2_handle, 6 & 0x7, &raw);
+    adc_oneshot_del_unit(adc2_handle);
+
+    ESP_LOGI(TAG,"Monitor Detect Raw: %d", raw);
+
+    return raw > 100;
+}
+
 esp_err_t monitor_start() {
     gptimer_start(monitor_timer);
     ESP_ERROR_CHECK(adc_continuous_start(monitor_adc));
@@ -202,6 +224,7 @@ void monitor_handle_buffer(){
     uint32_t adc_result_count = 0;
     unsigned int monitor_voltage_time_last = monitor_voltage_time;
     unsigned int monitor_voltage_result_time = 0;
+    bool current_is_on = false;
     int adc_result_value = 0;
     memset(monitor_result, 0xcc, MONITOR_CONV_FRAME_BYTES);
 
@@ -264,8 +287,13 @@ void monitor_handle_buffer(){
         if (count >= 100 || (!monitor_event.is_on && monitor_zx_count_last > 0)) {
             milli_watt_seconds = ((energy_total / count) / (400 * 50));
             average_power = milli_watt_seconds / 2;
+            current_is_on = monitor_event.is_on;
 
-            if (monitor_zx_count_last > 0 || monitor_event.is_on) {
+            memset(&monitor_event, 0, sizeof(monitor_event));
+            monitor_event.voltage_type = MONITOR_VOLTAGE_AC_RMS;
+            monitor_event.voltage = 23000;
+
+            if (monitor_zx_count_last > 0 || current_is_on) {
                 monitor_event.energy = milli_watt_seconds;
                 monitor_event.power = average_power;
                 monitor_event.current_max = current_max;
