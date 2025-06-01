@@ -174,22 +174,29 @@ esp_err_t monitor_init(esp_event_loop_handle_t event_handle) {
 bool monitor_detect() {
     int raw = 0;
 
-    adc_oneshot_unit_handle_t adc2_handle;
+    adc_oneshot_unit_handle_t adc1_handle;
     adc_oneshot_unit_init_cfg_t init_config2 = {
-        .unit_id = ADC_UNIT_2,
+        .unit_id = ADC_UNIT_1,
         .ulp_mode = ADC_ULP_MODE_DISABLE,
     };
 
-    if (adc_oneshot_new_unit(&init_config2, &adc2_handle) != ESP_OK) {
+    if (adc_oneshot_new_unit(&init_config2, &adc1_handle) != ESP_OK) {
         return false;
     }
 
-    adc_oneshot_read(adc2_handle, 6 & 0x7, &raw);
-    adc_oneshot_del_unit(adc2_handle);
+    adc_oneshot_chan_cfg_t adc1_cfg = {
+        .bitwidth = ADC_BITWIDTH_DEFAULT, // Default is 12 bits (max)
+        .atten = ADC_ATTEN_DB_6
+    };
+
+    adc_oneshot_config_channel(adc1_handle, 6 & 0x7, &adc1_cfg);
+
+    adc_oneshot_read(adc1_handle, 6 & 0x7, &raw);
+    adc_oneshot_del_unit(adc1_handle);
 
     ESP_LOGI(TAG,"Monitor Detect Raw: %d", raw);
 
-    return raw > 100;
+    return raw > 900;
 }
 
 esp_err_t monitor_start() {
