@@ -143,7 +143,7 @@ void mqtt_sn_task() {
 
         length = recv(mqtt_sn_config.socket, mqtt_sn_config.task_buffer, MQTT_SN_MSG_LEN, 0);
 
-        ESP_LOGI(TAG, "recv %d", length);
+        ESP_LOGD(TAG, "recv %d", length);
 
         if (length < 0) {
             switch (mqtt_sn_config.state) {
@@ -182,7 +182,7 @@ void mqtt_sn_task() {
                 
             case MQTT_SN_MESSAGE_TYPE_DISCONNECT:
                 mqtt_sn_config.state = MQTT_SN_STATE_OFF;
-                vTaskDelay(pdMS_TO_TICKS(2000));
+                vTaskDelay(pdMS_TO_TICKS(10000));
                 mqtt_sn_connect();
                 mqtt_sn_config.state = MQTT_SN_STATE_CONNECTING;
                 break;
