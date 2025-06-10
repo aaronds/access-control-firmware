@@ -58,10 +58,12 @@ TaskHandle_t status_task_handle;
 
 void status_task(void *arg) {
     char statusChar;
-    int64_t now = esp_timer_get_time();
-    unsigned int time_remaining = 0;
+    int64_t now;
+    uint32_t time_remaining = 0;
+    uint32_t time_since_used = 0;
 
     while(true) {
+        now = esp_timer_get_time();
         switch (controller_mode) {
             case CONTROLLER_MODE_INITIALISING:
                 statusChar = 'I';
@@ -93,12 +95,21 @@ void status_task(void *arg) {
         }
 
         if (controller_mode == CONTROLLER_MODE_UNLOCKED && controller_used && controller_unlocked_timeout > 0) { 
-            time_remaining = ((now - controller_used_after_time) / 100000) - controller_unlocked_timeout;
+            time_since_used = ((now - controller_used_after_time) / 1000000);
+
+            if (time_since_used > controller_unlocked_timeout) {
+                time_remaining = 0;
+            } else {
+                time_remaining = ((uint32_t )controller_unlocked_timeout) - time_since_used;
+            }
+            
+            ESP_LOGD(TAG, "Time Since Used: %ld > %d", time_since_used, controller_unlocked_timeout);
+
         } else {
-            time_remaining = 0;
+            time_remaining = 9999;
         }
 
-        ESP_LOGI(TAG, "status=%c is_on=%d energy_total=%ld power=%ld used=%d time_remaing=%d", statusChar, monitor_is_on, monitor_energy_total, monitor_power, controller_used, time_remaining);
+        ESP_LOGI(TAG, "status=%c is_on=%d energy_total=%ld power=%ld used=%d time_remaing=%ld", statusChar, monitor_is_on, monitor_energy_total, monitor_power, controller_used, time_remaining);
         monitor_energy_total = 0;
         memset(&mode_message, 0, sizeof(mode_message));
         mode_message.flags.is_on = monitor_is_on;
@@ -106,6 +117,7 @@ void status_task(void *arg) {
         mode_message.flags.monitor_enabled = monitor_enabled; 
         mode_message.mode = controller_mode;
         mode_message.time_remaining = time_remaining;
+        mode_message.unlocked_timeout = controller_unlocked_timeout;
         mqtt_sn_send_with_mac(MQTT_SN_MESSAGE_MODE, &mode_message, sizeof(mode_message));
 
         ulTaskNotifyTake(pdTRUE, 30000/portTICK_PERIOD_MS);
@@ -230,7 +242,7 @@ void on_monitor_state(void *handler_arg, esp_event_base_t base, int32_t id, void
     monitor_state_t *state = (monitor_state_t *) event_data;
     int64_t now = esp_timer_get_time();
     bool error_hold = false;
-    unsigned int unlocked_time = 0; 
+    uint32_t unlocked_time = 0; 
 
     /* Ignore error conditions if state has just changed */
 
@@ -241,6 +253,8 @@ void on_monitor_state(void *handler_arg, esp_event_base_t base, int32_t id, void
     if (state->energy > 0) {
         monitor_energy_total += state->energy;
         monitor_power = state->power;
+    } else {
+        monitor_power = 0;
     }
 
     monitor_is_on = state->is_on;
@@ -265,13 +279,16 @@ void on_monitor_state(void *handler_arg, esp_event_base_t base, int32_t id, void
 
             if (controller_used_threshold > 0 && state->power >= controller_used_threshold) {
                 controller_used = true;
+                controller_used_after_time = now;
                 controller_mode_set(CONTROLLER_MODE_IN_USE);
 
             } else if (controller_used) {
-                unlocked_time = (controller_used_after_time - now) / 100000;
+                unlocked_time = (now - controller_used_after_time) / 1000000;
+
+                ESP_LOGD(TAG, "Is Unlocked time: %ld > %d", unlocked_time, controller_unlocked_timeout);
 
                 if (unlocked_time > controller_unlocked_timeout) {
-                    ESP_LOGE(TAG, "Timeout, unlocked after used. Turning Off");
+                    ESP_LOGI(TAG, "Timeout, unlocked after used. Turning Off");
                     controller_lock();
                 }
             }
@@ -293,7 +310,7 @@ void on_monitor_state(void *handler_arg, esp_event_base_t base, int32_t id, void
             break;
     }
 
-    ESP_LOGI(TAG, "energy: %ld, power: %ld, current_max: %ld, zx: %ld", state->energy, state->power, state->current_max, state->zx);
+    ESP_LOGD(TAG, "energy: %ld, power: %ld, current_max: %ld, zx: %ld", state->energy, state->power, state->current_max, state->zx);
     mqtt_sn_send_with_mac(MQTT_SN_MESSAGE_POWER, state, sizeof(monitor_state_t));
 }
 
@@ -351,7 +368,7 @@ void app_main(void)
 
     if (ret != ESP_OK) {
         controller_used_threshold = 20;
-        controller_unlocked_timeout = 60;
+        controller_unlocked_timeout = 120;
     }
 
 

@@ -1,0 +1,16 @@
+[Unit]
+Description=Paho MQTT-SN
+
+[Service]
+Type=simple
+StandardOutput=journal
+ExecStart=/home/mqtt-sn/paho.mqtt-sn.embedded-c/MQTTSNGateway/bin/MQTT-SNGateway
+WorkingDirectory=/home/mqtt-sn/paho.mqtt-sn.embedded-c/MQTTSNGateway/bin
+Restart=always
+Environment="LD_PRELOAD=/usr/libexec/coreutils/libstdbuf.so"
+Environment="_STDBUF_O=L"
+Environment="LD_LIBRARY_PATH=/home/mqtt-sn/paho.mqtt-sn.embedded-c/build.gateway/MQTTSNPacket/src/"
+
+[Install]
+WantedBy=default.target
+

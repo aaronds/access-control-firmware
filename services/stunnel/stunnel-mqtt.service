@@ -1,0 +1,11 @@
+[Unit]
+Description=Stunnel MQTT
+
+[Service]
+Type=simple
+StandardOutput=journal
+ExecStart=/usr/bin/stunnel bhs-acs-iot.conf 
+WorkingDirectory=/home/mqtt-sn/stunnel
+
+[Install]
+WantedBy=default.target
