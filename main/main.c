@@ -106,7 +106,7 @@ void status_task(void *arg) {
             ESP_LOGD(TAG, "Time Since Used: %ld > %d", time_since_used, controller_unlocked_timeout);
 
         } else {
-            time_remaining = 9999;
+            time_remaining = 0;
         }
 
         ESP_LOGI(TAG, "status=%c is_on=%d energy_total=%ld power=%ld used=%d time_remaing=%ld", statusChar, monitor_is_on, monitor_energy_total, monitor_power, controller_used, time_remaining);
@@ -282,7 +282,7 @@ void on_monitor_state(void *handler_arg, esp_event_base_t base, int32_t id, void
                 controller_used_after_time = now;
                 controller_mode_set(CONTROLLER_MODE_IN_USE);
 
-            } else if (controller_used) {
+            } else if (controller_used && controller_unlocked_timeout > 0) {
                 unlocked_time = (now - controller_used_after_time) / 1000000;
 
                 ESP_LOGD(TAG, "Is Unlocked time: %ld > %d", unlocked_time, controller_unlocked_timeout);
@@ -368,7 +368,7 @@ void app_main(void)
 
     if (ret != ESP_OK) {
         controller_used_threshold = 20;
-        controller_unlocked_timeout = 120;
+        controller_unlocked_timeout = 0;
     }
 
 
