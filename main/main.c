@@ -393,8 +393,8 @@ void app_main(void)
         .uart = {
             .rw_timeout_ms = 500,
             .port = UART_NUM_0,
-            .rx_gpio = 21,
-            .tx_gpio = 22,
+            .rx_gpio = UART_PIN_NO_CHANGE,
+            .tx_gpio = UART_PIN_NO_CHANGE
         }
     };
 
