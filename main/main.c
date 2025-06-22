@@ -277,7 +277,7 @@ void on_monitor_state(void *handler_arg, esp_event_base_t base, int32_t id, void
                 ESP_LOGE(TAG, "Unlocked power failed.");
             }
 
-            if (controller_used_threshold > 0 && state->power >= controller_used_threshold) {
+            if (!error_hold && controller_used_threshold > 0 && state->power >= controller_used_threshold) {
                 controller_used = true;
                 controller_used_after_time = now;
                 controller_mode_set(CONTROLLER_MODE_IN_USE);
@@ -408,19 +408,15 @@ void app_main(void)
 
     controller_lock();
 
-    monitor_enabled = monitor_detect();
-
-    if (monitor_enabled) {
-
-        if (monitor_init(app_events) == ESP_OK) {
-            ESP_LOGI(TAG, "Monitor Init OK");
-        } else {
-            ESP_LOGI(TAG, "Monitor Init Failed");
-        }
-
+    if (monitor_init(app_events) == ESP_OK) {
         monitor_start();
-    } else {
-        ESP_LOGI(TAG, "Monitor not detected.");
+        vTaskDelay(2000/portTICK_PERIOD_MS);
+        monitor_enabled = monitor_calibrate();
+
+        if (!monitor_enabled) {
+            ESP_LOGI(TAG, "No monitor found.");
+            monitor_stop();
+        }
     }
 
     int64_t now = esp_timer_get_time();

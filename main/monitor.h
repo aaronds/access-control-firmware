@@ -19,13 +19,14 @@ ESP_EVENT_DECLARE_BASE(MONITOR_EVENTS);
 #define MONITOR_TIMER_DIVIDER 80 * 500
 #define MONITOR_TIMER_ALARM 20
 
-#define MONITOR_ZERO_AMPS 1630
+#define MONITOR_ZERO_AMPS 1650
 #define MONITOR_CURRENT_MV_PER_A 48
 
-bool monitor_detect();
 esp_err_t monitor_init();
 esp_err_t monitor_start();
 esp_err_t monitor_stop();
+bool monitor_calibrate();
+
 void monitor_handle_buffer();
 
 typedef struct {

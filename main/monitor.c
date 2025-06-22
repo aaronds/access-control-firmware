@@ -1,7 +1,6 @@
 #include "monitor.h"
 #include "driver/gpio.h"
 #include "driver/gptimer.h"
-#include "esp_adc/adc_oneshot.h"
 #include "esp_adc/adc_continuous.h"
 #include "esp_adc/adc_cali.h"
 #include "esp_adc/adc_cali_scheme.h"
@@ -24,6 +23,9 @@ unsigned int monitor_zx_count_last = 0;
 uint32_t monitor_zx_count_total = 0;
 unsigned int monitor_buffer_idx = 0;
 bool monitor_started = false;
+
+uint32_t monitor_zero_amps = MONITOR_ZERO_AMPS;
+uint32_t monitor_adc_average = 0;
 
 #define MONITOR_CONV_FRAME_SIZE 400
 #define MONITOR_CONV_FRAME_BYTES sizeof(adc_digi_output_data_t) * MONITOR_CONV_FRAME_SIZE
@@ -171,6 +173,8 @@ esp_err_t monitor_init(esp_event_loop_handle_t event_handle) {
     return ESP_OK;
 }
 
+/*
+
 bool monitor_detect() {
     int raw = 0;
 
@@ -198,6 +202,22 @@ bool monitor_detect() {
 
     return raw > 900;
 }
+*/
+
+bool monitor_calibrate() {
+    uint32_t diff_to_spec = monitor_adc_average > MONITOR_ZERO_AMPS ? monitor_adc_average - MONITOR_ZERO_AMPS : MONITOR_ZERO_AMPS - monitor_adc_average;
+
+    ESP_LOGI(TAG, "adc_avg: %ld, diff_to_spec: %ld", monitor_adc_average, diff_to_spec);
+
+    if (diff_to_spec > 500) {
+        /* Probably not present .:. fail. */
+        return false;
+    } else {
+       monitor_zero_amps = monitor_adc_average;
+       ESP_LOGI(TAG, "montior calibrate zero: %d", (int) monitor_zero_amps);
+       return true;
+    }
+}
 
 esp_err_t monitor_start() {
     gptimer_start(monitor_timer);
@@ -209,13 +229,15 @@ esp_err_t monitor_start() {
     return ESP_OK;
 }
 
-esp_err_t monitor_pause() {
+esp_err_t monitor_stop() {
     gptimer_stop(monitor_timer);
     ESP_ERROR_CHECK(adc_continuous_stop(monitor_adc));
 
     monitor_started = false;
     return ESP_OK;
 }
+
+
 
 void monitor_handle_buffer(){
     int voltage;
@@ -231,6 +253,7 @@ void monitor_handle_buffer(){
     uint32_t adc_result_count = 0;
     unsigned int monitor_voltage_time_last = monitor_voltage_time;
     unsigned int monitor_voltage_result_time = 0;
+    uint32_t adc_voltage_total = 0;
     bool current_is_on = false;
     int adc_result_value = 0;
     memset(monitor_result, 0xcc, MONITOR_CONV_FRAME_BYTES);
@@ -260,14 +283,16 @@ void monitor_handle_buffer(){
         /* Get the voltage time of the first frame */
 
         monitor_voltage_result_time = (monitor_voltage_time_last + 1 + (MONITOR_CONV_FRAME_SIZE - adc_result_count)) % MONITOR_CONV_FRAME_SIZE; 
+        adc_voltage_total = 0;
 
         for(int i = 0;i < adc_results;i += SOC_ADC_DIGI_RESULT_BYTES) {
             adc_digi_output_data_t *p = (adc_digi_output_data_t*)&monitor_result[i];
             adc_result_value = p->type1.data;
             adc_cali_raw_to_voltage(monitor_adc_cali, adc_result_value, &voltage);
+            adc_voltage_total += voltage;
 
-            if (voltage < MONITOR_ZERO_AMPS) {
-                current = ((MONITOR_ZERO_AMPS - voltage) * 100) / MONITOR_CURRENT_MV_PER_A;
+            if (voltage < monitor_zero_amps) {
+                current = ((monitor_zero_amps - voltage) * 100) / MONITOR_CURRENT_MV_PER_A;
                 if (current > current_max) {
                     current_max = current;
                 }
@@ -281,6 +306,8 @@ void monitor_handle_buffer(){
 
             monitor_voltage_result_time = (monitor_voltage_result_time + 1) % MONITOR_CONV_FRAME_SIZE; 
         }
+
+        monitor_adc_average = adc_voltage_total / adc_result_count;
 
         /* Only half the waveform was visible to the ADC
          * assume the other half is the same.
