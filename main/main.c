@@ -40,6 +40,8 @@ typedef struct {
         bool is_on : 1;
         bool is_used : 1;
         bool monitor_enabled : 1;
+        bool nfc_enabled : 1;
+        bool is_observer : 1;
     } flags ;
 } monitor_mode_t;
 
@@ -50,7 +52,10 @@ static uint8_t inductor_tag[4];
 uint32_t monitor_energy_total = 0;
 uint32_t monitor_power = 0;
 bool monitor_is_on = false;
+
 bool monitor_enabled = false;
+bool nfc_enabled = true;
+bool observer_mode = false;
 
 monitor_mode_t mode_message;
 
@@ -115,6 +120,8 @@ void status_task(void *arg) {
         mode_message.flags.is_on = monitor_is_on;
         mode_message.flags.is_used = controller_used;
         mode_message.flags.monitor_enabled = monitor_enabled; 
+        mode_message.flags.nfc_enabled = nfc_enabled;
+        mode_message.flags.is_observer = observer_mode;
         mode_message.mode = controller_mode;
         mode_message.time_remaining = time_remaining;
         mode_message.unlocked_timeout = controller_unlocked_timeout;
@@ -138,14 +145,18 @@ void controller_lock(void)
     controller_used = false;
 }
 
+void controller_unlock() {
+    status_indicator_output_on();
+    gpio_set_relay(true);
+    controller_mode_set(CONTROLLER_MODE_UNLOCKED);
+    controller_used = false;
+}
+
 void controller_try_unlock(pn532_event_tag_scanned_data_t* tag)
 {
     esp_err_t ret = http_api_unlock(tag->data, sizeof(tag->data));
     if (ret == ESP_OK) {
-        status_indicator_output_on();
-        gpio_set_relay(true);
-        controller_mode_set(CONTROLLER_MODE_UNLOCKED);
-        controller_used = false;
+        controller_unlock();
     } else {
         status_indicator_error_brief();
     }
@@ -268,13 +279,24 @@ void on_monitor_state(void *handler_arg, esp_event_base_t base, int32_t id, void
 
         case CONTROLLER_MODE_LOCKED:
             if (!error_hold && state->is_on) { 
-                ESP_LOGE(TAG, "Locked but power on.");
+
+                if (observer_mode) {
+                    controller_unlock();
+                } else {
+                    ESP_LOGE(TAG, "Locked but power on.");
+                }
+
             }
             break;
 
         case CONTROLLER_MODE_UNLOCKED:
             if (!error_hold && !state->is_on) {
-                ESP_LOGE(TAG, "Unlocked power failed.");
+                if (observer_mode) {
+                    controller_lock();
+                    break;
+                } else {
+                    ESP_LOGE(TAG, "Unlocked power failed.");
+                }
             }
 
             if (!error_hold && controller_used_threshold > 0 && state->power >= controller_used_threshold) {
@@ -282,7 +304,7 @@ void on_monitor_state(void *handler_arg, esp_event_base_t base, int32_t id, void
                 controller_used_after_time = now;
                 controller_mode_set(CONTROLLER_MODE_IN_USE);
 
-            } else if (controller_used && controller_unlocked_timeout > 0) {
+            } else if (!observer_mode && controller_used && controller_unlocked_timeout > 0) {
                 unlocked_time = (now - controller_used_after_time) / 1000000;
 
                 ESP_LOGD(TAG, "Is Unlocked time: %ld > %d", unlocked_time, controller_unlocked_timeout);
@@ -402,6 +424,11 @@ void app_main(void)
     ESP_ERROR_CHECK(pn532_create(&pn532_config, &pn532));
     ESP_ERROR_CHECK(pn532_start(pn532));
 
+    /* TODO: Check version. */
+
+    nfc_enabled = true;
+
+
     ESP_ERROR_CHECK(gpio_control_init(app_events));
 
     xTaskCreate(status_task, "status_task", 2048, NULL, tskIDLE_PRIORITY, &status_task_handle); 
@@ -417,6 +444,11 @@ void app_main(void)
             ESP_LOGI(TAG, "No monitor found.");
             monitor_stop();
         }
+    }
+
+    if (!nfc_enabled && monitor_enabled) {
+        ESP_LOGI(TAG, "Entering observer mode.");
+        observer_mode = true;
     }
 
     int64_t now = esp_timer_get_time();
