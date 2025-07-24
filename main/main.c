@@ -367,7 +367,7 @@ void app_main(void)
     ret = http_api_settings(&controller_used_threshold, &controller_unlocked_timeout);
 
     if (ret != ESP_OK) {
-        controller_used_threshold = 20;
+        controller_used_threshold = 55;
         controller_unlocked_timeout = 0;
     }
 

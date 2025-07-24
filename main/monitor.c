@@ -291,8 +291,8 @@ void monitor_handle_buffer(){
             adc_cali_raw_to_voltage(monitor_adc_cali, adc_result_value, &voltage);
             adc_voltage_total += voltage;
 
-            if (voltage < monitor_zero_amps) {
-                current = ((monitor_zero_amps - voltage) * 100) / MONITOR_CURRENT_MV_PER_A;
+            if (voltage < (monitor_zero_amps + MONITOR_ZERO_OFFSET)) {
+                current = ((monitor_zero_amps + MONITOR_ZERO_OFFSET - voltage) * 100) / MONITOR_CURRENT_MV_PER_A;
                 if (current > current_max) {
                     current_max = current;
                 }
@@ -345,7 +345,7 @@ void monitor_handle_buffer(){
 
             esp_event_post_to(monitor_event_handle, MONITOR_EVENTS, MONITOR_EVENT_STATE, &monitor_event, sizeof(monitor_event), portMAX_DELAY);
 
-            ESP_LOGD(TAG, "mWs: %ld, mW: %ld lADCr: %d ADCv: %d vTime: %d ADCrc: %ld ZXc:%d adcPeriod: %lld", milli_watt_seconds, average_power, adc_result_value, voltage, monitor_voltage_result_time, adc_result_count, monitor_zx_count_last, adc_last_conv_time);
+            ESP_LOGD(TAG, "Ws: %ld, W: %ld lADCr: %d ADCv: %d vTime: %d ADCrc: %ld ZXc:%d adcPeriod: %lld adcAverage:%ld", milli_watt_seconds, average_power, adc_result_value, voltage, monitor_voltage_result_time, adc_result_count, monitor_zx_count_last, adc_last_conv_time, monitor_adc_average);
             
             energy_total = 0;
             adc_conv_total_time = 0;
