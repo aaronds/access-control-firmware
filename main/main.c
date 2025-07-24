@@ -17,6 +17,8 @@
 
 static const char* TAG = "main";
 
+pn532_handle_t pn532 = NULL;
+
 typedef enum {
     CONTROLLER_MODE_INITIALISING,
     CONTROLLER_MODE_LOCKED,
@@ -43,6 +45,7 @@ typedef struct {
         bool nfc_enabled : 1;
         bool is_observer : 1;
     } flags ;
+    uint32_t energy_total;
 } monitor_mode_t;
 
 bool controller_used = false;
@@ -115,7 +118,6 @@ void status_task(void *arg) {
         }
 
         ESP_LOGI(TAG, "status=%c is_on=%d energy_total=%ld power=%ld used=%d time_remaing=%ld", statusChar, monitor_is_on, monitor_energy_total, monitor_power, controller_used, time_remaining);
-        monitor_energy_total = 0;
         memset(&mode_message, 0, sizeof(mode_message));
         mode_message.flags.is_on = monitor_is_on;
         mode_message.flags.is_used = controller_used;
@@ -125,8 +127,10 @@ void status_task(void *arg) {
         mode_message.mode = controller_mode;
         mode_message.time_remaining = time_remaining;
         mode_message.unlocked_timeout = controller_unlocked_timeout;
+        mode_message.energy_total = monitor_energy_total;
         mqtt_sn_send_with_mac(MQTT_SN_MESSAGE_MODE, &mode_message, sizeof(mode_message));
-
+        
+        monitor_energy_total = 0;
         ulTaskNotifyTake(pdTRUE, 30000/portTICK_PERIOD_MS);
     }
 }
@@ -139,10 +143,18 @@ void controller_mode_set(controller_mode_t mode_new) {
 
 void controller_lock(void)
 {
-    status_indicator_idle();
+
+    if (observer_mode) {
+        status_indicator_observe();
+    } else {
+        status_indicator_idle();
+    }
+
     gpio_set_relay(false);
     controller_mode_set(CONTROLLER_MODE_LOCKED);
     controller_used = false;
+
+    pn532_restart(pn532);
 }
 
 void controller_unlock() {
@@ -415,25 +427,36 @@ void app_main(void)
         .uart = {
             .rw_timeout_ms = 500,
             .port = UART_NUM_0,
-            .rx_gpio = UART_PIN_NO_CHANGE,
-            .tx_gpio = UART_PIN_NO_CHANGE
+            .rx_gpio = UART_PIN_NO_CHANGE, //21
+            .tx_gpio = UART_PIN_NO_CHANGE //22
         }
     };
 
-    pn532_handle_t pn532 = NULL;
     ESP_ERROR_CHECK(pn532_create(&pn532_config, &pn532));
     ESP_ERROR_CHECK(pn532_start(pn532));
 
     /* TODO: Check version. */
 
-    nfc_enabled = true;
+    uint8_t nfc_ic;
+    uint8_t nfc_ver;
+    uint8_t nfc_rev;
+    uint8_t nfc_support;
 
+    pn532_firmware_version(pn532, &nfc_ic, &nfc_ver, &nfc_rev, &nfc_support);
+
+    ESP_LOGI(TAG, "NFC IC: %d, NFC Version: %d", (int) nfc_ic, (int) nfc_ver);
+
+    if (nfc_ic > 0 && nfc_ver > 0) {
+        ESP_LOGI(TAG, "NFC Enabled");
+        nfc_enabled = true;
+    } else {
+        nfc_enabled = false;
+        ESP_LOGI(TAG, "NFC Not Found");
+    }
 
     ESP_ERROR_CHECK(gpio_control_init(app_events));
 
     xTaskCreate(status_task, "status_task", 2048, NULL, tskIDLE_PRIORITY, &status_task_handle); 
-
-    controller_lock();
 
     if (monitor_init(app_events) == ESP_OK) {
         monitor_start();
@@ -450,6 +473,8 @@ void app_main(void)
         ESP_LOGI(TAG, "Entering observer mode.");
         observer_mode = true;
     }
+    
+    controller_lock();
 
     int64_t now = esp_timer_get_time();
     mqtt_sn_send_with_mac(MQTT_SN_MESSAGE_HELLO, &now, sizeof(now));

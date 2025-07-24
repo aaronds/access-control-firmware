@@ -35,6 +35,10 @@ esp_err_t pn532_create(pn532_config_t* config, pn532_handle_t* out_pn532);
 
 esp_err_t pn532_start(pn532_handle_t pn532);
 
+esp_err_t pn532_firmware_version(pn532_handle_t pn532, uint8_t* ic, uint8_t* ver, uint8_t* rev, uint8_t* support);
+
 esp_err_t pn532_pause(pn532_handle_t pn532);
+
+esp_err_t pn532_restart(pn532_handle_t pn532);
 
 esp_err_t pn532_destroy(pn532_handle_t pn532);

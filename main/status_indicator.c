@@ -48,6 +48,13 @@ const blink_step_t blink_idle[] = {
     {LED_BLINK_LOOP, 0, 0},
 };
 
+const blink_step_t blink_observe[] = {
+    {LED_BLINK_BREATHE, LED_STATE_ON, 30},
+    {LED_BLINK_BREATHE, LED_STATE_25_PERCENT, 30},
+    {LED_BLINK_BREATHE, LED_STATE_25_PERCENT, 8000},
+    {LED_BLINK_LOOP, 0, 0},
+};
+
 typedef enum {
     STATUS_INDICATOR_ERROR_BRIEF,
     STATUS_INDICATOR_ERROR_FATAL,
@@ -56,6 +63,7 @@ typedef enum {
     STATUS_INDICATOR_AWAIT_INDUCTOR,
     STATUS_INDICATOR_OUTPUT_ON,
     STATUS_INDICATOR_IDLE,
+    STATUS_INDICATOR_OBSERVE,
     STATUS_INDICATOR_MAX,                 /**< INVALID type */
 } status_indicator_blink_type_t;
 
@@ -67,6 +75,7 @@ static blink_step_t const *led_blink_list[] = {
     [STATUS_INDICATOR_AWAIT_INDUCTOR] = blink_await_inductor,
     [STATUS_INDICATOR_OUTPUT_ON] = blink_output_on,
     [STATUS_INDICATOR_IDLE] = blink_idle,
+    [STATUS_INDICATOR_OBSERVE] = blink_observe,
     [STATUS_INDICATOR_MAX] = NULL,
 };
 
@@ -97,6 +106,13 @@ void status_indicator_idle(void) {
     led_indicator_stop(led_handle, STATUS_INDICATOR_OUTPUT_ON);
     led_indicator_stop(led_handle, STATUS_INDICATOR_AWAIT_INDUCTOR);
     led_indicator_start(led_handle, STATUS_INDICATOR_IDLE);
+}
+
+void status_indicator_observe(void) {
+    led_indicator_stop(led_handle, STATUS_INDICATOR_ENROLL);
+    led_indicator_stop(led_handle, STATUS_INDICATOR_OUTPUT_ON);
+    led_indicator_stop(led_handle, STATUS_INDICATOR_AWAIT_INDUCTOR);
+    led_indicator_start(led_handle, STATUS_INDICATOR_OBSERVE);
 }
 
 void status_indicator_output_on(void) {

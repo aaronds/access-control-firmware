@@ -22,6 +22,7 @@ struct pn532 {
     TaskHandle_t task_handle;              /*<! Handle of task */
     esp_event_loop_handle_t event_handle;  /*<! Handle of event loop */
     bool scanning;                         /*<! Whether the pn532 is in scanning or idle mode */
+    bool restart;                          /*<! If task should pause then start again */
     bool tag_was_present_last_time;
 };
 
@@ -378,6 +379,18 @@ esp_err_t pn532_pause(pn532_handle_t pn532)
     return ESP_OK;
 }
 
+esp_err_t pn532_restart(pn532_handle_t pn532)
+{
+
+    if (!pn532) {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    pn532->restart = true;
+    
+    return ESP_OK;
+}
+
 esp_err_t pn532_destroy(pn532_handle_t pn532)
 {
     esp_err_t ret = ESP_OK;
@@ -415,6 +428,17 @@ static void pn532_task(void* arg)
             continue;
         } else if(!xTaskDelayUntil(&last_wake_time, delay_interval_ms/portTICK_PERIOD_MS)) {
             last_wake_time = xTaskGetTickCount();
+        }
+
+        if (pn532->restart) {
+            pn532_pause(pn532);
+            if (pn532_start(pn532) == ESP_OK) {
+                pn532->restart = false;
+                pn532->tag_was_present_last_time = false;
+            } else {
+                pn532->scanning = true;
+                ESP_LOGE(TAG, "Restart failed.");
+            }
         }
 
         delay_interval_ms = pn532->scan_interval_ms;
