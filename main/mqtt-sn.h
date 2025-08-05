@@ -29,6 +29,11 @@ typedef struct {
     TaskHandle_t task;
 } mqtt_sn_config_t;
 
+typedef struct mqtt_acs_error_t {
+    uint16_t tag;
+    uint16_t error;
+} mqtt_acs_error_t;
+
 esp_err_t mqtt_sn_init();
 
 void mqtt_sn_connect();
@@ -37,4 +42,8 @@ void mqtt_sn_header_predefined(uint8_t *message, uint16_t topic,uint16_t length)
 void mqtt_sn_send(uint16_t topic, void *buff,size_t length);
 void mqtt_sn_send_with_mac(uint16_t topic, void *buff, size_t length);
 void mqtt_sn_task();
+
+/* Valid error codes defined in main/errors.json by root CMakeLists.txt */
+void mqtt_sn_send_error(uint16_t tag, uint16_t error);
+//void mqtt_sn_send_error_no_PII(uint16_t tag, uint16_t error, void *arg, uint16_t length);
 

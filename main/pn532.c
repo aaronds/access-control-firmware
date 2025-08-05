@@ -6,12 +6,18 @@
 #include "pn532.h"
 #include "pn532_registers.h"
 
+#include "mqtt-sn.h"
+
 static const char* TAG = "pn532";
 
 #define UART_BUF_SIZE (1024)
 
 #define FREE(ptr) \
     if(ptr) { free(ptr); ptr = NULL; }
+
+void pn532_error(uint16_t code) {
+    mqtt_sn_send_error(ACS_ERROR_PN532, code);
+}
 
 struct pn532 {
     bool running;                          /*<! Indicates whether pn532 task is running or not */
@@ -211,6 +217,7 @@ esp_err_t pn532_firmware_version(pn532_handle_t pn532, uint8_t* ic, uint8_t* ver
     uint8_t buf[4] = {0};
     rc = pn532_get_response(pn532, PN532_COMMAND_GETFIRMWAREVERSION, buf, 4, pn532->uart_rw_timeout_ms/portTICK_PERIOD_MS);
     if (rc < 0) {
+        pn532_error(ACS_ERROR_PN532_VERSION);
         return rc;
     }
     *ic = buf[0];
@@ -438,6 +445,7 @@ static void pn532_task(void* arg)
             } else {
                 pn532->scanning = true;
                 ESP_LOGE(TAG, "Restart failed.");
+                pn532_error(ACS_ERROR_PN532_RESTART);
             }
         }
 
@@ -448,6 +456,7 @@ static void pn532_task(void* arg)
         if (ret < 0) {
             ESP_LOGE(TAG, "Error listening for targets");
             pn532->tag_was_present_last_time = false;
+            pn532_error(ACS_ERROR_PN532_LISTENING);
             continue;
         }
 
@@ -466,12 +475,14 @@ static void pn532_task(void* arg)
         if (num_read < 0) {
             ESP_LOGE(TAG, "Error reading card");
             pn532->tag_was_present_last_time = false;
+            pn532_error(ACS_ERROR_PN532_READING);
             continue;
         }
 
         if (num_read != 4) {
             ESP_LOGE(TAG, "Card UID not 4 bytes");
             pn532->tag_was_present_last_time = false;
+            pn532_error(ACS_ERROR_PN532_LENGTH);
             continue;
         }
 

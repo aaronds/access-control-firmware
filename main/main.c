@@ -60,12 +60,16 @@ bool monitor_enabled = false;
 bool nfc_enabled = true;
 bool observer_mode = false;
 
+void main_error(uint16_t code) {
+    mqtt_sn_send_error(ACS_ERROR_MAIN, code);
+}
+
 monitor_mode_t mode_message;
 
 TaskHandle_t status_task_handle;
 
 void status_task(void *arg) {
-    char statusChar;
+    char status_char;
     int64_t now;
     uint32_t time_remaining = 0;
     uint32_t time_since_used = 0;
@@ -74,31 +78,31 @@ void status_task(void *arg) {
         now = esp_timer_get_time();
         switch (controller_mode) {
             case CONTROLLER_MODE_INITIALISING:
-                statusChar = 'I';
+                status_char = 'I';
                 break;
 
             case CONTROLLER_MODE_LOCKED:
-                statusChar = 'L';
+                status_char = 'L';
                 break;
 
             case CONTROLLER_MODE_UNLOCKED:
-                statusChar = 'U';
+                status_char = 'U';
                 break;
 
             case CONTROLLER_MODE_IN_USE:
-                statusChar = 'A';
+                status_char = 'A';
                 break;
 
             case CONTROLLER_MODE_AWAIT_INDUCTOR:
-                statusChar = 'D';
+                status_char = 'D';
                 break;
 
             case CONTROLLER_MODE_ENROLL:
-                statusChar = 'E';
+                status_char = 'E';
                 break;
 
             default:
-                statusChar = 'X';
+                status_char = 'X';
                 break;
         }
 
@@ -171,6 +175,7 @@ void controller_try_unlock(pn532_event_tag_scanned_data_t* tag)
         controller_unlock();
     } else {
         status_indicator_error_brief();
+        main_error(ACS_ERROR_MAIN_ACCESS_UNLOCK);
     }
 }
 
@@ -189,6 +194,7 @@ void controller_verify_inductor(pn532_event_tag_scanned_data_t* tag)
         controller_mode_set(CONTROLLER_MODE_ENROLL);
     } else {
         status_indicator_error_brief();
+        main_error(ACS_ERROR_MAIN_ACCESS_INDUCTOR);
     }
 }
 
@@ -206,6 +212,7 @@ void controller_enroll_member(pn532_event_tag_scanned_data_t* tag)
         controller_mode_set(CONTROLLER_MODE_ENROLL);
     } else {
         status_indicator_error_brief();
+        main_error(ACS_ERROR_MAIN_ACCESS_ENROLL);
     }
 }
 
@@ -286,6 +293,7 @@ void on_monitor_state(void *handler_arg, esp_event_base_t base, int32_t id, void
         case CONTROLLER_MODE_INITIALISING:
             if (!error_hold && state->is_on) {
                 ESP_LOGE(TAG, "Initialising, power already on.");
+                main_error(ACS_ERROR_MAIN_POWER_ON);
             }
             break;
 
@@ -296,6 +304,7 @@ void on_monitor_state(void *handler_arg, esp_event_base_t base, int32_t id, void
                     controller_unlock();
                 } else {
                     ESP_LOGE(TAG, "Locked but power on.");
+                    main_error(ACS_ERROR_MAIN_POWER_ON);
                 }
 
             }
@@ -308,6 +317,7 @@ void on_monitor_state(void *handler_arg, esp_event_base_t base, int32_t id, void
                     break;
                 } else {
                     ESP_LOGE(TAG, "Unlocked power failed.");
+                    main_error(ACS_ERROR_MAIN_POWER_OFF);
                 }
             }
 
@@ -331,6 +341,7 @@ void on_monitor_state(void *handler_arg, esp_event_base_t base, int32_t id, void
         case CONTROLLER_MODE_IN_USE:
             if (!error_hold && !state->is_on) {
                 ESP_LOGE(TAG, "In use power failed.");
+                main_error(ACS_ERROR_MAIN_POWER_OFF);
             }
 
             if (state->power < controller_used_threshold) {
@@ -374,6 +385,7 @@ void app_main(void)
         char update_url[128] = {0};
         ret = http_api_has_update(update_url, sizeof(update_url));
         if (ret) {
+            main_error(ACS_ERROR_MAIN_OTA);
             vTaskDelay(2000/portTICK_PERIOD_MS);
             continue;
         }
@@ -383,6 +395,7 @@ void app_main(void)
             ret = http_api_ota(update_url);
             if (ret != ESP_OK) {
                 ESP_LOGE(TAG, "OTA failed");
+                main_error(ACS_ERROR_MAIN_OTA_FAILED);
             }
         } else {
             esp_ota_img_states_t state = ESP_OTA_IMG_UNDEFINED;
@@ -401,6 +414,7 @@ void app_main(void)
     ret = http_api_settings(&controller_used_threshold, &controller_unlocked_timeout);
 
     if (ret != ESP_OK) {
+        main_error(ACS_ERROR_MAIN_SETTINGS);
         controller_used_threshold = 20;
         controller_unlocked_timeout = 0;
     }

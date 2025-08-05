@@ -1,0 +1,80 @@
+{
+    "tags": [
+        {
+            "name" : "ACS_ERROR_MAIN",
+            "value": 100,
+            "errors" : [
+                {
+                    "name" : "UNKNOWN",
+                    "value" : 100
+                },
+                {
+                    "name" : "POWER",
+                    "value" : 200
+                },
+                {
+                    "name" : "POWER_ON",
+                    "value" : 201
+                },
+                {
+                    "name" : "POWER_OFF",
+                    "value" : 202
+                },
+                {
+                    "name" : "OTA",
+                    "value" : 300
+                },
+                {
+                    "name" : "OTA_FAILED",
+                    "value" : 301
+                },
+                {
+                    "name" : "SETTINGS",
+                    "value" : 400
+                },
+                {
+                    "name": "ACCESS",
+                    "value": 500
+                },
+                {
+                    "name": "ACCESS_UNLOCK",
+                    "value": 501
+                },
+                {
+                    "name": "ACCESS_INDUCTOR",
+                    "value": 502
+                },
+                {
+                    "name": "ACCESS_ENROLL",
+                    "value": 503
+                }
+            ]
+        },
+        {
+            "name" : "ACS_ERROR_PN532",
+            "value": 200,
+            "errors": [
+                {
+                    "name": "VERSION",
+                    "value": 101
+                },
+                {
+                    "name": "LISTENING",
+                    "value": 102
+                },
+                {
+                    "name": "READING",
+                    "value": 103
+                },
+                {
+                    "name": "LENGTH",
+                    "value": 104
+                },
+                {
+                    "name": "RESTART",
+                    "value": 105
+                }
+            ]
+        }
+    ]
+}

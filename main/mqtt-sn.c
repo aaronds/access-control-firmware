@@ -4,6 +4,8 @@
 
 mqtt_sn_config_t mqtt_sn_config;
 
+mqtt_acs_error_t mqtt_acs_error;
+
 static const char* TAG = "mqtt-sn";
 
 esp_err_t mqtt_sn_init() {
@@ -191,4 +193,11 @@ void mqtt_sn_task() {
                 break;
         }
     }
+}
+
+void mqtt_sn_send_error(uint16_t tag, uint16_t error) {
+    mqtt_acs_error.tag = tag;
+    mqtt_acs_error.error = error;
+
+    mqtt_sn_send_with_mac(MQTT_SN_MESSAGE_ERROR, &mqtt_acs_error, sizeof(mqtt_acs_error));
 }
