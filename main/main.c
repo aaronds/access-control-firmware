@@ -121,7 +121,7 @@ void status_task(void *arg) {
             time_remaining = 0;
         }
 
-        ESP_LOGI(TAG, "status=%c is_on=%d energy_total=%ld power=%ld used=%d time_remaing=%ld", statusChar, monitor_is_on, monitor_energy_total, monitor_power, controller_used, time_remaining);
+        ESP_LOGI(TAG, "status=%c is_on=%d energy_total=%ld power=%ld used=%d time_remaing=%ld", status_char, monitor_is_on, monitor_energy_total, monitor_power, controller_used, time_remaining);
         memset(&mode_message, 0, sizeof(mode_message));
         mode_message.flags.is_on = monitor_is_on;
         mode_message.flags.is_used = controller_used;
