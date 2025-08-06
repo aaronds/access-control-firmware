@@ -21,7 +21,9 @@ typedef enum {
 
 typedef struct {
     struct sockaddr_in server;
+    struct sockaddr_in server_broadcast;
     int socket;
+    int socket_broadcast;
     uint8_t message_buffer[MQTT_SN_MSG_LEN];
     uint8_t task_buffer[MQTT_SN_MSG_LEN];
     uint8_t mac[MACHINE_MAC_LEN];
@@ -41,6 +43,7 @@ bool mqtt_sn_is_ready();
 void mqtt_sn_header_predefined(uint8_t *message, uint16_t topic,uint16_t length);
 void mqtt_sn_send(uint16_t topic, void *buff,size_t length);
 void mqtt_sn_send_with_mac(uint16_t topic, void *buff, size_t length);
+void mqtt_sn_broadcast_with_mac(char *topic, size_t topic_length, void *buff, size_t length);
 void mqtt_sn_task();
 
 /* Valid error codes defined in main/errors.json by root CMakeLists.txt */

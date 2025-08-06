@@ -9,6 +9,7 @@ mqtt_acs_error_t mqtt_acs_error;
 static const char* TAG = "mqtt-sn";
 
 esp_err_t mqtt_sn_init() {
+    int broadcast = 1;
     esp_read_mac(mqtt_sn_config.mac, ESP_MAC_WIFI_STA);
 
     memset(&mqtt_sn_config.server, 0, sizeof(mqtt_sn_config.server));
@@ -29,6 +30,25 @@ esp_err_t mqtt_sn_init() {
     timeout.tv_sec = 30;
     timeout.tv_usec = 0;
     setsockopt(mqtt_sn_config.socket, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof timeout);
+
+    if (CONFIG_MQTT_SN_PORT_BROADCAST > 0) {
+
+        memset(&mqtt_sn_config.server_broadcast, 0, sizeof(mqtt_sn_config.server_broadcast));
+        mqtt_sn_config.server_broadcast.sin_family = AF_INET;
+        mqtt_sn_config.server_broadcast.sin_port = htons(CONFIG_MQTT_SN_PORT_BROADCAST);
+
+        if (!inet_pton(AF_INET, "255.255.255.255", &mqtt_sn_config.server_broadcast.sin_addr)) {
+            ESP_LOGE(TAG, "broadcast address error");
+        }
+
+        if ((mqtt_sn_config.socket_broadcast = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1) {
+            ESP_LOGE(TAG, "broadcast socket error");
+        }
+
+        if (setsockopt(mqtt_sn_config.socket_broadcast, SOL_SOCKET, SO_BROADCAST, &broadcast, sizeof(broadcast)) == -1) {
+            ESP_LOGE(TAG, "broadcast socket error");
+        }
+    }
 
     mqtt_sn_config.state = MQTT_SN_STATE_OFF;
 
@@ -120,7 +140,7 @@ void mqtt_sn_send_with_mac(uint16_t topic, void *buff, size_t length) {
         return;
     }
 
-    if (length + MQTT_SN_PUBLISH_HEADER_LENGTH + MACHINE_MAC_LEN> MQTT_SN_MSG_LEN) {
+    if (length + MQTT_SN_PUBLISH_HEADER_LENGTH + MACHINE_MAC_LEN > MQTT_SN_MSG_LEN) {
         return;
     }
 
@@ -132,6 +152,32 @@ void mqtt_sn_send_with_mac(uint16_t topic, void *buff, size_t length) {
     memcpy(message + MQTT_SN_PUBLISH_HEADER_LENGTH + MACHINE_MAC_LEN, buff, length);
 
     sendto(mqtt_sn_config.socket, message, length + MQTT_SN_PUBLISH_HEADER_LENGTH + MACHINE_MAC_LEN, 0, (struct sockaddr *) &mqtt_sn_config.server, sizeof(mqtt_sn_config.server));
+}
+
+void mqtt_sn_broadcast_with_mac(char *topic, size_t topic_length, void *buff, size_t length) {
+    if (!mqtt_sn_config.socket_broadcast) {
+        return;
+    }
+
+    if (length + topic_length + MQTT_SN_PUBLISH_HEADER_LENGTH + MACHINE_MAC_LEN > MQTT_SN_MSG_LEN) {
+        return;
+    }
+
+    uint8_t *message = mqtt_sn_config.message_buffer;
+
+    message[0] = MQTT_SN_PUBLISH_HEADER_LENGTH + MACHINE_MAC_LEN + topic_length + length;
+    message[1] = MQTT_SN_MESSAGE_TYPE_PUBLISH;
+    message[2] = (MQTT_SN_QOS_NO_CONNECT << MQTT_SN_PUBLISH_QOS) | ( MQTT_SN_TOPIC_TYPE_NORMAL << MQTT_SN_PUBLISH_TOPIC_TYPE);
+    message[3] = (topic_length >> 8) & 0xff;
+    message[4] = (topic_length & 0xff);
+    message[5] = 0;
+    message[6] = 0;
+
+    memcpy(message + MQTT_SN_PUBLISH_HEADER_LENGTH, topic, topic_length);
+    memcpy(message + MQTT_SN_PUBLISH_HEADER_LENGTH + topic_length, mqtt_sn_config.mac, MACHINE_MAC_LEN);
+    memcpy(message + MQTT_SN_PUBLISH_HEADER_LENGTH + topic_length + MACHINE_MAC_LEN, buff, length);
+
+    sendto(mqtt_sn_config.socket_broadcast, message, length + topic_length + MQTT_SN_PUBLISH_HEADER_LENGTH + MACHINE_MAC_LEN, 0, (struct sockaddr *) &mqtt_sn_config.server, sizeof(mqtt_sn_config.server));
 }
 
 void mqtt_sn_task() {

@@ -44,9 +44,24 @@ typedef struct {
         bool monitor_enabled : 1;
         bool nfc_enabled : 1;
         bool is_observer : 1;
+        bool mode_change : 1;
     } flags ;
     uint32_t energy_total;
 } monitor_mode_t;
+
+typedef struct {
+    controller_mode_t mode;
+    struct {
+        bool is_on : 1;
+        bool is_used : 1;
+        bool monitor_enabled : 1;
+        bool nfc_enabled : 1;
+        bool is_observer : 1;
+        bool mode_change : 1;
+    } flags ;
+} broadcast_mode_t;
+
+#define ACS_MODE_BROADCAST_TOPIC "acs/b/mode/v1.0.0"
 
 bool controller_used = false;
 
@@ -65,6 +80,7 @@ void main_error(uint16_t code) {
 }
 
 monitor_mode_t mode_message;
+broadcast_mode_t mode_broadcast;
 
 TaskHandle_t status_task_handle;
 
@@ -73,6 +89,7 @@ void status_task(void *arg) {
     int64_t now;
     uint32_t time_remaining = 0;
     uint32_t time_since_used = 0;
+    bool mode_change = false;
 
     while(true) {
         now = esp_timer_get_time();
@@ -122,17 +139,30 @@ void status_task(void *arg) {
         }
 
         ESP_LOGI(TAG, "status=%c is_on=%d energy_total=%ld power=%ld used=%d time_remaing=%ld", status_char, monitor_is_on, monitor_energy_total, monitor_power, controller_used, time_remaining);
+
+        mode_change = mode_message.mode != controller_mode;
+
         memset(&mode_message, 0, sizeof(mode_message));
         mode_message.flags.is_on = monitor_is_on;
         mode_message.flags.is_used = controller_used;
         mode_message.flags.monitor_enabled = monitor_enabled; 
         mode_message.flags.nfc_enabled = nfc_enabled;
         mode_message.flags.is_observer = observer_mode;
+        mode_message.flags.mode_change = mode_change;
         mode_message.mode = controller_mode;
         mode_message.time_remaining = time_remaining;
         mode_message.unlocked_timeout = controller_unlocked_timeout;
         mode_message.energy_total = monitor_energy_total;
         mqtt_sn_send_with_mac(MQTT_SN_MESSAGE_MODE, &mode_message, sizeof(mode_message));
+
+        mode_broadcast.mode = mode_change;
+        mode_broadcast.flags.is_on = monitor_is_on;
+        mode_broadcast.flags.is_used = controller_used;
+        mode_broadcast.flags.monitor_enabled = monitor_enabled; 
+        mode_broadcast.flags.nfc_enabled = nfc_enabled;
+        mode_broadcast.flags.is_observer = observer_mode;
+        mode_broadcast.flags.mode_change = mode_change;
+        mqtt_sn_broadcast_with_mac(ACS_MODE_BROADCAST_TOPIC, strlen(ACS_MODE_BROADCAST_TOPIC), &mode_broadcast, sizeof(mode_broadcast));
         
         monitor_energy_total = 0;
         ulTaskNotifyTake(pdTRUE, 30000/portTICK_PERIOD_MS);

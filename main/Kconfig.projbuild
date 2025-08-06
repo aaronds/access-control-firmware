@@ -56,8 +56,14 @@ menu "Access controller configuration"
 
     config MQTT_SN_PORT
         int "MQTT SN Port"
-        default 514
+        default 21883
         help
             The UDP port number for mqtt-sn
+
+    config MQTT_SN_PORT_BROADCAST
+        int "MQTT SN Broadcast Port"
+        default 31883
+        help
+            The UDP port number for mqtt-sn broacasts
 
 endmenu
