@@ -380,6 +380,17 @@ void app_main(void)
     esp_log_set_vprintf(&syslog_vprintf);
     esp_log_level_set("*", ESP_LOG_INFO);
 
+    vTaskDelay(2000/portTICK_PERIOD_MS);
+
+    mqtt_sn_init();
+
+    for (int sn_attempts = 0; sn_attempts < 3; sn_attempts++) {
+        if (mqtt_sn_is_ready()) {
+            break;
+        } else {
+            vTaskDelay(1000/portTICK_PERIOD_MS);
+        }
+    }
 
     for (int ota_attempts = 0; ota_attempts < 5; ota_attempts++) {
         char update_url[128] = {0};
@@ -409,7 +420,6 @@ void app_main(void)
         break;
     }
 
-    mqtt_sn_init();
 
     ret = http_api_settings(&controller_used_threshold, &controller_unlocked_timeout);
 
