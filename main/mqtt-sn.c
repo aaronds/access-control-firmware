@@ -48,6 +48,8 @@ esp_err_t mqtt_sn_init() {
         if (setsockopt(mqtt_sn_config.socket_broadcast, SOL_SOCKET, SO_BROADCAST, &broadcast, sizeof(broadcast)) == -1) {
             ESP_LOGE(TAG, "broadcast socket error");
         }
+    } else {
+        ESP_LOGI(TAG, "No broadcast configured.");
     }
 
     mqtt_sn_config.state = MQTT_SN_STATE_OFF;
@@ -177,7 +179,7 @@ void mqtt_sn_broadcast_with_mac(char *topic, size_t topic_length, void *buff, si
     memcpy(message + MQTT_SN_PUBLISH_HEADER_LENGTH + topic_length, mqtt_sn_config.mac, MACHINE_MAC_LEN);
     memcpy(message + MQTT_SN_PUBLISH_HEADER_LENGTH + topic_length + MACHINE_MAC_LEN, buff, length);
 
-    sendto(mqtt_sn_config.socket_broadcast, message, length + topic_length + MQTT_SN_PUBLISH_HEADER_LENGTH + MACHINE_MAC_LEN, 0, (struct sockaddr *) &mqtt_sn_config.server, sizeof(mqtt_sn_config.server));
+    sendto(mqtt_sn_config.socket_broadcast, message, length + topic_length + MQTT_SN_PUBLISH_HEADER_LENGTH + MACHINE_MAC_LEN, 0, (struct sockaddr *) &mqtt_sn_config.server_broadcast, sizeof(mqtt_sn_config.server_broadcast));
 }
 
 void mqtt_sn_task() {

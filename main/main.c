@@ -155,7 +155,7 @@ void status_task(void *arg) {
         mode_message.energy_total = monitor_energy_total;
         mqtt_sn_send_with_mac(MQTT_SN_MESSAGE_MODE, &mode_message, sizeof(mode_message));
 
-        mode_broadcast.mode = mode_change;
+        mode_broadcast.mode = controller_mode;
         mode_broadcast.flags.is_on = monitor_is_on;
         mode_broadcast.flags.is_used = controller_used;
         mode_broadcast.flags.monitor_enabled = monitor_enabled; 
