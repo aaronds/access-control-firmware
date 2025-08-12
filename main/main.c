@@ -455,7 +455,7 @@ void app_main(void)
 
     if (ret != ESP_OK) {
         main_error(ACS_ERROR_MAIN_SETTINGS);
-        controller_used_threshold = 20;
+        controller_used_threshold = 18;
         controller_unlocked_timeout = 0;
     }
 

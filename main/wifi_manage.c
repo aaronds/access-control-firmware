@@ -24,13 +24,19 @@ static void event_handler(void* arg, esp_event_base_t event_base,
     if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
         esp_wifi_connect();
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
+        //TODO: Timer restart
         ESP_LOGI(TAG, "AP disconnected");
-        xTimerChangePeriod(reconnect_timer, (reconnect_timeout)/portTICK_PERIOD_MS, 100);
-        xTimerStart(reconnect_timer, 100);
+        if (xTimerIsTimerActive(reconnect_timer)) { 
+            ESP_LOGI(TAG, "Reconnect in progress");
+        } else {
+            xTimerChangePeriod(reconnect_timer, (reconnect_timeout)/portTICK_PERIOD_MS, 100);
+            xTimerStart(reconnect_timer, 100);
 
-        reconnect_timeout *= 2;
-        if (reconnect_timeout > CONFIG_MAX_RECONNECT_INTERVAL) {
-            reconnect_timeout = CONFIG_MAX_RECONNECT_INTERVAL;
+            reconnect_timeout *= 2;
+            if (reconnect_timeout > CONFIG_MAX_RECONNECT_INTERVAL) {
+                reconnect_timeout = CONFIG_MAX_RECONNECT_INTERVAL;
+            }
+            ESP_LOGI(TAG, "Reconnect timer started");
         }
 
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
