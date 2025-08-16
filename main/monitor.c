@@ -318,7 +318,7 @@ void monitor_handle_buffer(){
         monitor_zx_count_total += monitor_zx_count_last;
         count++;
 
-        if (count >= 100 || (!monitor_event.is_on && monitor_zx_count_last > 0)) {
+        if (count >= 100 || (!monitor_event.is_on && monitor_zx_count_last > MONITOR_MIN_ZX_ON)) {
             milli_watt_seconds = ((energy_total / count) / (400 * 50));
             average_power = milli_watt_seconds / 2;
             current_is_on = monitor_event.is_on;
@@ -327,7 +327,7 @@ void monitor_handle_buffer(){
             monitor_event.voltage_type = MONITOR_VOLTAGE_AC_RMS;
             monitor_event.voltage = 23000;
 
-            if (monitor_zx_count_last > 0 || current_is_on) {
+            if (monitor_zx_count_last > MONITOR_MIN_ZX_ON || current_is_on) {
                 monitor_event.energy = milli_watt_seconds;
                 monitor_event.power = average_power;
                 monitor_event.current_max = current_max;
@@ -341,7 +341,7 @@ void monitor_handle_buffer(){
                 monitor_event.time = adc_conv_total_time;
             }
 
-            monitor_event.is_on = monitor_zx_count_last > 0;
+            monitor_event.is_on = monitor_zx_count_last > MONITOR_MIN_ZX_ON;
 
             esp_event_post_to(monitor_event_handle, MONITOR_EVENTS, MONITOR_EVENT_STATE, &monitor_event, sizeof(monitor_event), portMAX_DELAY);
 

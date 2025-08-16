@@ -75,6 +75,8 @@ bool monitor_enabled = false;
 bool nfc_enabled = true;
 bool observer_mode = false;
 
+#define ERROR_MIN_ZX 3
+
 void main_error(uint16_t code) {
     mqtt_sn_send_error(ACS_ERROR_MAIN, code);
 }
@@ -321,7 +323,7 @@ void on_monitor_state(void *handler_arg, esp_event_base_t base, int32_t id, void
 
     switch (controller_mode) {
         case CONTROLLER_MODE_INITIALISING:
-            if (!error_hold && state->is_on) {
+            if (!error_hold && state->is_on && state->zx > ERROR_MIN_ZX) {
                 ESP_LOGE(TAG, "Initialising, power already on.");
                 main_error(ACS_ERROR_MAIN_POWER_ON);
             }
@@ -332,7 +334,7 @@ void on_monitor_state(void *handler_arg, esp_event_base_t base, int32_t id, void
 
                 if (observer_mode) {
                     controller_unlock();
-                } else {
+                } else if (state->zx > ERROR_MIN_ZX) {
                     ESP_LOGE(TAG, "Locked but power on.");
                     main_error(ACS_ERROR_MAIN_POWER_ON);
                 }
@@ -455,7 +457,7 @@ void app_main(void)
 
     if (ret != ESP_OK) {
         main_error(ACS_ERROR_MAIN_SETTINGS);
-        controller_used_threshold = 18;
+        controller_used_threshold = 23;
         controller_unlocked_timeout = 0;
     }
 
